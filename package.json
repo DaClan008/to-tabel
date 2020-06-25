@@ -1,0 +1,79 @@
+{
+  "name": "to-table",
+  "version": "0.0.1",
+  "description": "Console log and object or array to table",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint src/**/*.ts --fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DaClan008/totable.git"
+  },
+  "author": "Jan Lehmkuhl <DaClan008@users.noreply.github.com> (http://somewhere.com/)",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/DaClan008/totable/issues"
+  },
+  "homepage": "https://github.com/DaClan008/totable#readme",
+  "devDependencies": {
+    "@types/jest": "^26.0.0",
+    "@types/node": "^14.0.13",
+    "@typescript-eslint/eslint-plugin": "^3.3.0",
+    "@typescript-eslint/parser": "^3.3.0",
+    "codecov": "^3.7.0",
+    "coveralls": "^3.1.0",
+    "eslint": "^7.2.0",
+    "eslint-config-airbnb-base": "^14.2.0",
+    "eslint-config-node": "^4.1.0",
+    "eslint-config-prettier": "^6.11.0",
+    "eslint-plugin-import": "^2.21.2",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-prettier": "^3.1.4",
+    "jest": "^26.0.1",
+    "prettier": "^2.0.5",
+    "rimraf": "^3.0.2",
+    "ts-jest": "^26.1.0",
+    "ts-node": "^8.10.2",
+    "typescript": "^3.9.5"
+  },
+  "jest": {
+    "coverageDirectory": "./coverage/",
+    "collectCoverage": true,
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest"
+    },
+    "coveragePathIgnorePatterns": [
+      "./node_modules",
+      "./coverage",
+      "./.vscode",
+      "./__test__",
+      "./tools"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 80,
+        "functions": 80,
+        "lines": 80,
+        "statements": -10
+      }
+    },
+    "coverageReporters": [
+      "json",
+      "lcov",
+      "text",
+      "clover"
+    ],
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx"
+    ]
+  },
+  "dependencies": {
+    "ansi-regex": "^5.0.0",
+    "boks": "^1.0.3"
+  }
+}

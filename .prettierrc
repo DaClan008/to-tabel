@@ -1,0 +1,33 @@
+{
+    "singleQuote": true,
+    "tabWidth": 4,
+    "useTabs": true,
+    "bracketSpacing": true,
+    "semi": true,
+    "endOfLine": "auto",
+    "trailingComma": "all",
+    "printWidth": 100,
+    "arrowParens": "avoid",
+    "insert_final_newline": true,
+    "overrides": [
+        {
+            "files": [
+                "**/*.json"
+            ],
+            "options": {
+                "singleQuote": false,
+                "trailingComma": "none",
+                "printWidth": 10000
+            }
+        },
+        {
+            "files": [
+                "**/cli/cpyFlex.ts",
+                "**/cli/cpyFlex.js"
+            ],
+            "options": {
+                "endOfLine": "lf"
+            }
+        }
+    ]
+}

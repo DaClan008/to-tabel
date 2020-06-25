@@ -1,0 +1,4 @@
+__test__/**/*.ts
+node_modules/*
+**/*.json
+playground/*

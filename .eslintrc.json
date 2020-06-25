@@ -1,0 +1,107 @@
+{
+	"env": {
+		"es6": true,
+		"node": true
+	},
+	"extends": ["airbnb-base", "prettier", "eslint:recommended", "plugin:node/recommended"],
+	"parserOptions": {
+		"ecmaFeatures": {
+			"jsx": true
+		},
+		"ecmaVersion": 2020,
+		"sourceType": "module"
+	},
+	"plugins": ["prettier"],
+	"overrides": [
+		{
+			"files": ["**/*.ts", "**/*.tsx", "**/*.d.ts"],
+			"env": { "es6": true, "node": true },
+			"extends": ["airbnb-base", "plugin:node/recommended", "prettier/@typescript-eslint", "plugin:@typescript-eslint/recommended", "plugin:import/typescript"],
+			"parser": "@typescript-eslint/parser",
+			"plugins": ["@typescript-eslint", "prettier"],
+			"parserOptions": {
+				"ecmaFeatures": {
+					"jsx": true
+				},
+				"ecmaVersion": 2020,
+				"sourceType": "module"
+			},
+			"settings": {
+				"node": {
+					"resolvePaths": "./**/*.*",
+					"tryExtensions": [".js", ".json", ".node", ".ts", ".tsx", ".jsx", ".d.ts"]
+				},
+				"import/parser": {
+					"@typescript-eslint/parser": [".js", ".jsx", ".ts", ".tsx"]
+				},
+				"import/extensions": [".js", ".ts", ".tsx", ".jsx"]
+			},
+			"rules": {
+				"node/no-unsupported-features/es-syntax": "off",
+				"import/prefer-default-export": "off",
+				"import/extensions": "off",
+				"prettier/prettier": "warn",
+				"no-unused-vars": "warn",
+				"object-curly-newline": ["error", { "ImportDeclaration": "never" }],
+				"no-console": "off",
+				"func-names": "off",
+				"linebreak-style": "off",
+				"no-process-exit": "off",
+				"object-shorthand": "off",
+				"class-methods-use-this": "off",
+				"operator-linebreak": ["error", "after", { "overrides": { "?": "before", ":": "before" } }],
+				"no-continue": "off",
+				"no-tabs": "off",
+				"indent": [
+					"warn",
+					"tab",
+					{
+						"SwitchCase": 1,
+						"ignoreComments": true
+					}
+				],
+				"no-fallthrough": [
+					"error",
+					{
+						"commentPattern": "break[\\s\\w]*omitted"
+					}
+				],
+				"no-mixed-spaces-and-tabs": ["error", "smart-tabs"],
+				"no-plusplus": "off",
+				"arrow-parens": "off",
+				"import/export": "off",
+				"@typescript-eslint/no-namespace": "off",
+				"ignored-file-warning": "off",
+				"no-nested-ternary": "off",
+				"no-bitwise": "off",
+				"no-dupe-class-members": "off",
+				"eqeqeq": ["error", "smart"],
+				"@typescript-eslint/no-non-null-assertion": "off",
+				"@typescript-eslint/interface-name-prefix": "off",
+				"no-useless-constructor": "off",
+				"@typescript-eslint/ban-types": "off"
+			}
+		}
+	],
+	"rules": {
+		"func-names": "off",
+		"linebreak-style": "off",
+		"no-process-exit": "off",
+		"object-shorthand": "off",
+		"class-methods-use-this": "off",
+		"indent": "off",
+		"no-tabs": "off",
+		"no-plusplus": "off",
+		"no-fallthrough": "off",
+		"arrow-parens": "off",
+		"no-unused-vars": "off",
+		"no-continue": "off",
+		"no-nested-ternary": "off",
+		"operator-linebreak": "off",
+		"camelcase": "off",
+		"no-param-reassign": "off",
+		"no-shadow": "warn",
+		"prefer-const": "warn",
+		"no-bitwise": "off"
+	}
+}
