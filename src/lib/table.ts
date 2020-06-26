@@ -11,9 +11,10 @@ import {
 	columnProperty,
 	columnProperties,
 	Alignment,
+	emojiLevel,
 	// eslint-disable-next-line object-curly-newline
 } from '../types/options';
-import { ColumnInfo } from './columnInfo';
+import { ColumnInfo, colOptions } from './columnInfo';
 import { fillSpace, isNum, getStringSize } from './helper';
 import { CombinedInfo } from './combinedInfo';
 
@@ -148,12 +149,15 @@ export class Table extends BaseData {
 
 	// OPTIONS ---------------------------------------------------------------
 	private nextOption: Options = {
+		eLevel: emojiLevel.all,
 		padding: 1,
 		excludeHeader: true,
 		margin: 0,
 		flatten: true,
 		stream: false,
 	};
+
+	private readonly eLevel: emojiLevel;
 
 	// #endregion variables
 
@@ -305,6 +309,8 @@ export class Table extends BaseData {
 		super(key.toString(), row);
 		this.maxdepth = options.maxDepth != null ? Math.max(1, options.maxDepth) : 3;
 		this.deep = depth > 0 ? depth : 1;
+		this.eLevel = options.eLevel || emojiLevel.all;
+		this.nextOption.eLevel = this.eLevel;
 
 		// deal with border options
 		if (options.borders != null) {
@@ -753,7 +759,8 @@ export class Table extends BaseData {
 		const addValue = (val: columnProperty, name: string): void => {
 			if (this.cols[name]) return;
 			if (!canProceed(name)) return;
-			const prop = {
+			const prop: colOptions = {
+				eLevel: this.eLevel,
 				padding: this.padding,
 				borderSize: this.vBorder,
 				tabSize: this.tabsize,
@@ -1251,7 +1258,15 @@ export class Table extends BaseData {
 					maxDepth: this.maxdepth,
 				};
 				result[nme] = new Table(options, col, this.deep + 1, nme, this.totalRows);
-			} else result[nme] = new ColumnData(nme, col.toString(), this.tabsize, this.totalRows);
+			} else {
+				result[nme] = new ColumnData(
+					nme,
+					col.toString(),
+					this.tabsize,
+					this.totalRows,
+					this.eLevel,
+				);
+			}
 			result[nme].on(Events.EventDataChanged, this.dataChangeEvent);
 			// match up colsize and datasize
 			if (this.cols[nme]) this.cols[nme].maxSize = result[nme].maxData;

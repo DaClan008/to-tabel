@@ -2,7 +2,23 @@ import { Options as boksOptions } from 'boks';
 
 export { boksOptions };
 
+export enum emojiLevel {
+	none = 0,
+	all = 1,
+	med = 2,
+	low = 3,
+}
+
 export type Options = {
+	/**
+	 * The level of complexity calculating emoji string sizes.
+	 * all: will attempt to convert the most complex emoji string to a single character.
+	 * med: will attempt to calculate the string size based on destructuring and be cognesent of EF0F
+	 * low:  will attempt to calculate the string size based purely on destructuring.
+	 * none: will calculate the actual characters in string (string.length).
+	 * @default all
+	 */
+	eLevel?: emojiLevel;
 	/** Determine if border should be printed. */
 	borders?: borderOptionTypes | boksOptions[] | false;
 	/** Determine the style for the borders if the table has sub tables */

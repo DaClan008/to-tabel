@@ -2,7 +2,7 @@
 import { EventEmitter } from 'events';
 import * as Events from './events';
 import { ColumnInfo } from './columnInfo';
-import { Alignment } from '../types/options';
+import { Alignment, emojiLevel } from '../types/options';
 import { fillSpace, getStringSize } from './helper';
 
 export class CombinedInfo extends EventEmitter {
@@ -35,6 +35,18 @@ export class CombinedInfo extends EventEmitter {
 	/** Returns the percentage in terms of table size vs column size */
 	get percentage(): boolean {
 		return this.nmeCol.percentage || this.numCol.percentage;
+	}
+
+	get tabSize(): number {
+		if (this.nmeCol) return this.nmeCol.tabSize;
+		if (this.numCol) return this.numCol.tabSize;
+		return 2;
+	}
+
+	get eLevel(): emojiLevel {
+		if (this.nmeCol) return this.nmeCol.eLevel;
+		if (this.numCol) return this.numCol.eLevel;
+		return emojiLevel.all;
 	}
 
 	/** Returns a string for an empty header line. */
@@ -432,7 +444,7 @@ export class CombinedInfo extends EventEmitter {
 		const align = header ? this.headAlign : this.align;
 
 		for (let i = 0, len = data.length; i < len; i++) {
-			let size = getStringSize(data[i]);
+			let size = getStringSize(data[i], this.tabSize, this.eLevel);
 			let line = data[i];
 			if (size.maxSize < workSize) {
 				const diff = workSize - size.maxSize;
@@ -456,7 +468,7 @@ export class CombinedInfo extends EventEmitter {
 				}
 				for (let x = line.length - 1; x >= 0; x--) {
 					let tmp = line.slice(0, x);
-					size = getStringSize(tmp);
+					size = getStringSize(tmp, this.tabSize, this.eLevel);
 					if (size.maxSize <= workSize) {
 						const diff = workSize - size.maxSize;
 						switch (this.align) {

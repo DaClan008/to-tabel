@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import * as Events from './events';
-import { columnProperty, Alignment } from '../types/options';
+import { columnProperty, Alignment, emojiLevel } from '../types/options';
 import { isNum, getStringSize, getStringLines, fillSpace } from './helper';
 
 /**
@@ -19,12 +19,14 @@ export class ColumnInfo extends EventEmitter {
 	 */
 	private space: number;
 
+	readonly eLevel: emojiLevel;
+
 	/** the actual size of the column set at start (including padding) */
 	private readonly sze = -1;
 
 	private readonly pattern: string;
 
-	private readonly tabSize: number;
+	readonly tabSize: number;
 
 	private readonly minsize: number;
 
@@ -89,7 +91,7 @@ export class ColumnInfo extends EventEmitter {
 	 */
 	set printName(val: string) {
 		if (val !== this.prntName) {
-			const size = getStringSize(val, this.tabSize);
+			const size = getStringSize(val, this.tabSize, this.eLevel);
 			const max = this.maxSize;
 			this.prntName = size.val;
 			this.headerMaxSize = size.maxSize;
@@ -290,6 +292,7 @@ export class ColumnInfo extends EventEmitter {
 		this.changeSpace(options.padding, options.borderSize);
 		this.table = options.tableSize || 0;
 		this.tabSize = options.tabSize || 2;
+		this.eLevel = options.eLevel || emojiLevel.all;
 		this.align = options.align != null ? options.align : Alignment.left;
 		this.headAlign = options.headAlign != null ? options.headAlign : this.align;
 		this.pattern = options.pattern != null ? options.pattern : 'col-~D';
@@ -361,7 +364,10 @@ export class ColumnInfo extends EventEmitter {
 		let changed = false;
 		this.prevSize = this.size;
 
-		const lines: string[] = this.fillLine(getStringLines(this.printName, this.size), true);
+		const lines: string[] = this.fillLine(
+			getStringLines(this.printName, this.size, this.eLevel),
+			true,
+		);
 		if (lines.length !== this.lnes.length) changed = true;
 		else if (lines.length > 0) {
 			for (let i = 0, len = lines.length; i < len; i++) {
@@ -400,7 +406,7 @@ export class ColumnInfo extends EventEmitter {
 		if (workSize === 0) return [];
 
 		for (let i = 0, len = data.length; i < len; i++) {
-			let size = getStringSize(data[i]);
+			let size = getStringSize(data[i], this.tableSize, this.eLevel);
 			let line = data[i];
 			if (size.maxSize < workSize || workSize === -1) {
 				const diff = workSize - size.maxSize;
@@ -420,7 +426,7 @@ export class ColumnInfo extends EventEmitter {
 			} else if (size.maxSize > workSize) {
 				for (let x = line.length - 1; x >= 0; x--) {
 					let tmp = line.slice(0, x);
-					size = getStringSize(tmp);
+					size = getStringSize(tmp, this.tabSize, this.eLevel);
 					if (size.maxSize <= workSize) {
 						const diff = workSize - size.maxSize;
 						switch (this.align) {
@@ -472,6 +478,7 @@ export class ColumnInfo extends EventEmitter {
  * @internal
  */
 export type colOptions = columnProperty & {
+	eLevel: emojiLevel;
 	padding?: number;
 	borderSize?: number;
 	tabSize?: number;

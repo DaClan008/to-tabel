@@ -1,5 +1,6 @@
 import { getStringSize, getStringLines } from './helper';
 import { BaseData } from './baseData';
+import { emojiLevel } from '../types/options';
 
 export class ColumnData extends BaseData {
 	lines: string[] = [];
@@ -8,12 +9,18 @@ export class ColumnData extends BaseData {
 
 	private prevSize = -1;
 
-	constructor(key: string, private val: string, tabSpace: number, row: number) {
+	constructor(
+		key: string,
+		private val: string,
+		tabSpace: number,
+		row: number,
+		private readonly eLevel = emojiLevel.all,
+	) {
 		super(key, row);
-		const size = getStringSize(val || '', tabSpace);
+		const size = getStringSize(val || '', tabSpace, eLevel);
 		this.val = size.val;
 		this.max = size.maxSize;
-		this.lines = getStringLines(this.val, -1);
+		this.lines = getStringLines(this.val, -1, this.eLevel);
 	}
 
 	buildLines(): boolean {
@@ -26,7 +33,7 @@ export class ColumnData extends BaseData {
 			this.lines = [];
 			return changed;
 		}
-		const lines = getStringLines(this.val, this.size);
+		const lines = getStringLines(this.val, this.size, this.eLevel);
 		if (lines.length !== this.lines.length) changed = true;
 
 		for (let i = 0, len = lines.length; i < len; i++) {

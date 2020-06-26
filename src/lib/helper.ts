@@ -1,7 +1,8 @@
 import ansi from 'ansi-regex';
-import { Options, columnSize } from '../types/options';
+import { emojiLevel } from '../types/options';
 
 const ansiRegex = ansi();
+
 /**
  * get a spaced string.
  * @param {number} size The size of the space to fill.
@@ -18,9 +19,10 @@ export function fillSpace(size = 1, char = ' '): string {
 /**
  * Attempt to get a correct size ignoring emojis and some unicode characters.
  */
-export function getCleanSize(val: string): number {
+export function getCleanSize(val: string, eLevel = emojiLevel.all): number {
 	// strip ansi
 	const v = val.replace(ansiRegex, '');
+	if (eLevel === emojiLevel.none) return v.length;
 
 	// strip some emoji characters
 	const join = '\u{200D}';
@@ -28,10 +30,19 @@ export function getCleanSize(val: string): number {
 	let cnt = 0;
 
 	strSplit.forEach(section => {
-		const num = Array.from(section.split(/[\ufe00-\ufe0f]/).join('')).length;
-		cnt += num;
+		switch (eLevel) {
+			case emojiLevel.med:
+				cnt += [...section.replace(/[\ufe00-\ufe0f]/, '')].length;
+				break;
+			case emojiLevel.low:
+				cnt += [...section].length;
+				break;
+			default:
+				cnt += Array.from(section.split(/[\ufe00-\ufe0f]/).join('')).length;
+				break;
+		}
 	});
-	return cnt / strSplit.length;
+	return eLevel === emojiLevel.all ? cnt / strSplit.length : cnt;
 }
 
 /**
@@ -39,7 +50,11 @@ export function getCleanSize(val: string): number {
  * @param {string} val the value of the string to get a size of.
  * @param {number} tabSize A number representing the spaces of a tab character.  Default = 2
  */
-export function getStringSize(val: string | boolean | number, tabSize = 2): stringSize {
+export function getStringSize(
+	val: string | boolean | number,
+	tabSize = 2,
+	eLevel = emojiLevel.all,
+): stringSize {
 	const result: stringSize = {
 		maxSize: 0,
 		minSize: 0,
@@ -53,14 +68,14 @@ export function getStringSize(val: string | boolean | number, tabSize = 2): stri
 	const sizer = (str): void => {
 		// eslint-disable-next-line no-control-regex
 		const s = str.replace(/.\u0008/g, '').replace(/\v\f/g, '');
-		result.maxSize = Math.max(result.maxSize, getCleanSize(s));
+		result.maxSize = Math.max(result.maxSize, getCleanSize(s, eLevel));
 	};
 
 	splt.forEach(str => sizer(str));
 	return result;
 }
 
-export function getStringLines(str: string, size = -1): string[] {
+export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all): string[] {
 	const lines: string[] = [];
 	if (size === 0) return lines;
 
@@ -70,10 +85,12 @@ export function getStringLines(str: string, size = -1): string[] {
 
 	const removeChar = (removeStr): string => {
 		let tmp = removeStr;
-		const startLen = getCleanSize(tmp);
+		const startLen = getCleanSize(tmp, eLevel);
 		if (startLen <= 1) return '';
 
-		while (getCleanSize(tmp) !== startLen - 1 && tmp !== '') tmp = tmp.slice(0, tmp.length);
+		while (getCleanSize(tmp, eLevel) !== startLen - 1 && tmp !== '') {
+			tmp = tmp.slice(0, tmp.length);
+		}
 
 		return tmp;
 	};
@@ -84,18 +101,18 @@ export function getStringLines(str: string, size = -1): string[] {
 		let tmp = '';
 		const end = Math.min(testStr.length, start + 8);
 		const char8 = testStr + str.slice(start + 1, end);
-		const cleanSz = getCleanSize(char8);
+		const cleanSz = getCleanSize(char8, eLevel);
 		if (cleanSz === end - start) return start;
 		// return the last
 		for (let i = start; i < end; i++) {
 			tmp += str[i];
-			if (getCleanSize(tmp) === 1) answer = i;
+			if (getCleanSize(tmp, eLevel) === 1) answer = i;
 		}
 		return answer;
 	};
 
 	const endSpace = (): void => {
-		const shortLen = getCleanSize(currShort);
+		const shortLen = getCleanSize(currShort, eLevel);
 		if (currSize === size) {
 			lines.push(curr);
 			curr = '';
@@ -112,16 +129,16 @@ export function getStringLines(str: string, size = -1): string[] {
 		} else if (shortLen > size) {
 			// we need to split up shortLen
 			let tmp = curr;
-			let complex = currShort.length !== getCleanSize(currShort);
+			let complex = currShort.length !== getCleanSize(currShort, eLevel);
 			curr = '';
 			tmp += tmp === '' ? '' : ' ';
 
 			for (let i = 0, len = currShort.length; i < len; i++) {
-				if (getCleanSize(tmp) === size) {
+				if (getCleanSize(tmp, eLevel) === size) {
 					lines.push(tmp);
 					tmp = '';
 					const newCurr = currShort.slice(i);
-					complex = newCurr.length !== getCleanSize(newCurr);
+					complex = newCurr.length !== getCleanSize(newCurr, eLevel);
 				}
 				const to = complex ? cleanChar(currShort, i) : i;
 				if (to !== i) {
@@ -129,11 +146,11 @@ export function getStringLines(str: string, size = -1): string[] {
 					i = to;
 				} else tmp += currShort[i];
 			}
-			if (getCleanSize(tmp) === size) {
+			if (getCleanSize(tmp, eLevel) === size) {
 				lines.push(tmp);
 				curr = '';
 			} else curr = tmp;
-			currSize = getCleanSize(curr);
+			currSize = getCleanSize(curr, eLevel);
 		} else {
 			lines.push(curr);
 			curr = currShort;
@@ -168,7 +185,7 @@ export function getStringLines(str: string, size = -1): string[] {
 				if (currShort !== '') currShort = removeChar(currShort);
 				else if (curr !== '') {
 					curr = removeChar(curr);
-					currSize = getCleanSize(curr);
+					currSize = getCleanSize(curr, eLevel);
 				}
 				break;
 			case '\r':
