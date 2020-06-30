@@ -143,8 +143,6 @@ export class Table extends BaseData {
 	/** If true new columns can be added later, else the columns are fixed. */
 	private canGrow = true;
 
-	private ammendedCols: string[] = [];
-
 	private buildingHeader = false;
 
 	// OPTIONS ---------------------------------------------------------------
@@ -389,32 +387,18 @@ export class Table extends BaseData {
 		this.colChanged();
 		// set new sizes to data
 		const flat = this.flatten;
-		const addToAll = (data: rawDataObject): rawDataObject => {
-			const keys = Object.keys(data);
+		const { name, name2 } = info;
+		const size = flat ? info.size : info.contentSize;
+
+		const addToData = (data: rawDataObject): void => {
 			const d = data;
-			keys.forEach(key => {
-				d[key].size = info.contentSize;
-			});
-			return d;
+			if (d[name]) d[name].size = size;
+			else if (d[name2]) d[name2].size = size;
 		};
 
-		this.newData.forEach((data, idx) => {
-			if (flat) {
-				if (data[info.name]) this.newData[idx][info.name].size = info.size;
-				if (info.name !== info.name2 && data[info.name2]) {
-					this.newData[idx][info.name2].size = info.size;
-				}
-			} else addToAll(data);
-		});
+		this.newData.forEach(addToData);
 
-		this.rawData.forEach((data, idx) => {
-			if (flat) {
-				if (data[info.name]) this.rawData[idx][info.name].size = info.size;
-				if (info.name !== info.name2 && data[info.name2]) {
-					this.rawData[idx][info.name2].size = info.size;
-				}
-			} else addToAll(data);
-		});
+		this.rawData.forEach(addToData);
 	};
 
 	private ratioEventListener = (info: CombinedInfo): void => {
@@ -423,18 +407,17 @@ export class Table extends BaseData {
 
 		this.colChanged();
 
-		const addToAll = (data: rawDataObject): rawDataObject => {
+		const addToAll = (data: rawDataObject): void => {
 			const keys = Object.keys(data);
 			const d = data;
 			keys.forEach(key => {
 				d[key].size = info.contentSize;
 			});
-			return d;
 		};
 
-		this.newData.forEach(data => addToAll(data));
+		this.newData.forEach(addToAll);
 
-		this.rawData.forEach(data => addToAll(data));
+		this.rawData.forEach(addToAll);
 	};
 
 	private lineEventListener = (itm: CombinedInfo): void => {
@@ -473,7 +456,7 @@ export class Table extends BaseData {
 	// #region private functions
 	private fixBorderSpace(border: string, size: number): string {
 		const borderSize = getStringSize(border);
-		const diff = size - borderSize.maxSize;
+		const diff = size - borderSize.size;
 		if (diff > 0) {
 			if (diff === 1) return `${border} `;
 			const left = Math.floor(diff / 2);
@@ -490,35 +473,6 @@ export class Table extends BaseData {
 			return a.order - b.order;
 		});
 		this.calcSize();
-	}
-
-	private buildCombinedCols(): void {
-		this.sortedCols = [];
-		this.keys.forEach((key: string, idx: number) => {
-			const k = key || idx.toString();
-			if (this.combined[k]) {
-				this.combined[k].compare(this.cols[k], this.cols[idx.toString()]);
-			} else {
-				this.combined[k] = new CombinedInfo(this.cols[key], this.cols[idx.toString()]);
-				// register events
-				this.combined[k].on(Events.EventChangeMax, this.maxEventListener);
-				this.combined[k].on(Events.EventChangeSize, this.sizeEventListener);
-				this.combined[k].on(Events.EventChangeRatio, this.ratioEventListener);
-				this.combined[k].on(Events.EventChangeLines, this.lineEventListener);
-				this.combined[k].on(Events.EventChangeOrder, this.orderEventListener);
-			}
-			if (!this.combined[k].proper) {
-				this.combined[k].removeListener(Events.EventChangeMax, this.maxEventListener);
-				this.combined[k].removeListener(Events.EventChangeSize, this.sizeEventListener);
-				this.combined[k].removeListener(Events.EventChangeRatio, this.ratioEventListener);
-				this.combined[k].removeListener(Events.EventChangeLines, this.lineEventListener);
-				this.combined[k].removeListener(Events.EventChangeOrder, this.orderEventListener);
-				delete this.combined[k];
-				return;
-			}
-			this.sortedCols.push(this.combined[k]);
-		});
-		this.sortCols();
 	}
 
 	// --> BORDERS xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -682,6 +636,7 @@ export class Table extends BaseData {
 
 		let line = '';
 		const buildCol = (col: CombinedInfo, indx: number): void => {
+			if (col.size <= 0) return;
 			const colLine = col.lines.length > indx ? col.lines[indx] : col.emptyHeader;
 			line += (line !== '' ? headSpacer : '') + colLine;
 			if (indx === 0) max = Math.max(col.lines.length, max);
@@ -707,10 +662,6 @@ export class Table extends BaseData {
 		this.buildHeader();
 	}
 
-	colHeaderChanged(): void {
-		this.drawBorders();
-	}
-
 	// --> COLUMN FUNCTIONS xxxxxxxxxxxxxxxxxxxxx
 	/**
 	 * Adds columns for an entire row
@@ -734,25 +685,61 @@ export class Table extends BaseData {
 			return true;
 		};
 
+		const buildCombinedCols = (): void => {
+			this.sortedCols = [];
+			this.keys.forEach((key: string, idx: number) => {
+				const k = key || idx.toString();
+				if (this.combined[k]) {
+					this.combined[k].compare(this.cols[k], this.cols[idx.toString()]);
+				} else {
+					this.combined[k] = new CombinedInfo(this.cols[key], this.cols[idx.toString()]);
+					// register events
+					this.combined[k].on(Events.EventChangeMax, this.maxEventListener);
+					this.combined[k].on(Events.EventChangeSize, this.sizeEventListener);
+					this.combined[k].on(Events.EventChangeRatio, this.ratioEventListener);
+					this.combined[k].on(Events.EventChangeLines, this.lineEventListener);
+					this.combined[k].on(Events.EventChangeOrder, this.orderEventListener);
+				}
+				if (!this.combined[k].proper) {
+					this.combined[k].removeListener(Events.EventChangeMax, this.maxEventListener);
+					this.combined[k].removeListener(Events.EventChangeSize, this.sizeEventListener);
+					this.combined[k].removeListener(
+						Events.EventChangeRatio,
+						this.ratioEventListener,
+					);
+					this.combined[k].removeListener(
+						Events.EventChangeLines,
+						this.lineEventListener,
+					);
+					this.combined[k].removeListener(
+						Events.EventChangeOrder,
+						this.orderEventListener,
+					);
+					delete this.combined[k];
+					return;
+				}
+				this.sortedCols.push(this.combined[k]);
+			});
+			this.sortCols();
+		};
+
 		// add a new key which does not already exist (to this.keys).
 		const addKey = (key: string): void => {
 			// find next open
 			for (let i = prevKey + 1, len = keyLen; i < len; i++) {
-				if (this.keys[i] === '' && key !== '') {
+				if (this.keys[i] === '') {
 					this.keys[i] = key;
 					fixCombined = true;
 					prevKey = i;
 					i = keyLen;
-					this.addAmmendCols(key);
 					return;
 				}
 			}
 			if (!canProceed(key)) return;
 			this.keys.push(key);
 			fixCombined = true;
-			this.addAmmendCols(key);
+			prevKey = keyLen;
 			keyLen++;
-			prevKey++;
 		};
 
 		// add column values to cols variable.
@@ -773,8 +760,6 @@ export class Table extends BaseData {
 			this.cols[name] = new ColumnInfo(prop);
 			if (!this.flatten) this.cols[name].ratio = 1;
 			else this.cols[name].ratio = 0;
-			// this.cols[name].on(ColumnInfo.alter, addammendColsEH);
-			// this.cols[name].on(ColumnInfo.headerChanged, colHeaderChangedEH);
 			if (isNum(name)) newCol = true;
 		};
 
@@ -803,12 +788,12 @@ export class Table extends BaseData {
 
 		// sort out keys
 		colKeys.forEach((key, idx) => {
+			if (key == null) return;
 			if (key === '') {
 				if (keyLen < prevKey) {
 					if (!canProceed(idx.toString())) return;
 					this.keys.push('');
 					fixCombined = true;
-					this.mustRedraw();
 				}
 				prevKey++;
 			} else {
@@ -819,7 +804,8 @@ export class Table extends BaseData {
 		});
 
 		if (fixCombined || this.keys.length !== this.sortedCols.length || newCol) {
-			this.buildCombinedCols();
+			buildCombinedCols();
+			this.colChanged();
 		}
 	}
 
@@ -830,47 +816,9 @@ export class Table extends BaseData {
 		}
 	}
 
-	addAmmendCols(colName: string): void {
-		if (!colName || !this.cols[colName]) return;
-		if (this.ammendedCols.indexOf(colName) === -1) this.ammendedCols.push(colName);
-	}
-
 	colChanged(): void {
 		this.mustRedraw();
 		this.drawBorders();
-	}
-
-	private fixAmmendmentList(): void {
-		if (this.ammendedCols.length === 0) return;
-		let amend2: string;
-		let amend1: string;
-
-		const addRow = (val: number, row: rawDataObject): number => {
-			let v = val;
-			if (amend1 && amend1 !== '-1' && row[amend1]) v = Math.max(val, row[amend1].maxData);
-			if (amend2 && amend2 !== '-1' && row[amend2]) v = Math.max(val, row[amend2].maxData);
-			return v;
-		};
-
-		const setColSize = (name: string, val: number): void => {
-			if (!this.cols[name] || this.cols[name].maxContent === val) return;
-			this.cols[name].reset();
-			this.cols[name].maxSize = val;
-		};
-
-		this.ammendedCols.forEach(amend => {
-			amend1 = amend;
-			amend2 = isNum(amend)
-				? this.keys[parseInt(amend, 10)]
-				: this.keys.indexOf(amend).toString();
-			if (!this.cols[amend1] && !this.cols[amend2]) return;
-			let val = this.rawData.reduce(addRow, 0);
-			val += this.newData.reduce(addRow, val);
-			setColSize(amend1, val);
-			setColSize(amend2, val);
-		});
-
-		this.ammendedCols = [];
 	}
 
 	private calcSize(): void {
@@ -1009,14 +957,10 @@ export class Table extends BaseData {
 		}
 
 		setSizes();
-
-		// fix columns that have changed due to ratio change
-		this.fixAmmendmentList();
 	}
 
 	private getValue(): string {
 		let result = '';
-		if (this.ammendedCols.length > 0) this.calcSize();
 		this.buildLines();
 
 		if (this.header !== false && this.header !== this.oldHeader && this.val) {

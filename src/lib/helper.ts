@@ -3,6 +3,8 @@ import { emojiLevel } from '../types/options';
 
 const ansiRegex = ansi();
 
+const specialEmo = [];
+
 /**
  * get a spaced string.
  * @param {number} size The size of the space to fill.
@@ -21,28 +23,54 @@ export function fillSpace(size = 1, char = ' '): string {
  */
 export function getCleanSize(val: string, eLevel = emojiLevel.all): number {
 	// strip ansi
-	const v = val.replace(ansiRegex, '');
+	let v = val.replace(ansiRegex, '');
 	if (eLevel === emojiLevel.none) return v.length;
+	const specials = new RegExp(`(${specialEmo.join('|')})`);
+	let len = 0;
+
+	if (eLevel === emojiLevel.all && specialEmo.length > 0) {
+		while (specials.test(v)) {
+			v = v.replace(specials, '');
+			len++;
+		}
+	}
+	// eslint-disable-next-line no-control-regex
+	const Ascii = v.replace(/[\x00-\x7f]/g, '|');
+	// eslint-disable-next-line no-control-regex
+	const nonAscii = v.replace(/[^\x00-\x7f]/g, '');
 
 	// strip some emoji characters
 	const join = '\u{200D}';
-	const strSplit = v.split(join);
-	let cnt = 0;
 
-	strSplit.forEach(section => {
-		switch (eLevel) {
-			case emojiLevel.med:
-				cnt += [...section.replace(/[\ufe00-\ufe0f]/, '')].length;
-				break;
-			case emojiLevel.low:
-				cnt += [...section].length;
-				break;
-			default:
-				cnt += Array.from(section.split(/[\ufe00-\ufe0f]/).join('')).length;
-				break;
+	const asciiCalc = (tot: number, str: string): number => {
+		if (!str) return 0;
+		let cnt = 0;
+
+		const strSplit = str.split(join);
+
+		strSplit.forEach(section => {
+			switch (eLevel) {
+				case emojiLevel.med:
+					cnt += [...section.replace(/[\ufe00-\ufe0f]/, '')].length;
+					break;
+				case emojiLevel.low:
+					cnt += [...section].length;
+					break;
+				default:
+					cnt += Array.from(section.split(/[\ufe00-\ufe0f]/).join('')).length;
+					break;
+			}
+		});
+		if (eLevel === emojiLevel.all) {
+			const frac = Math.ceil(cnt / strSplit.length);
+			const mod = cnt % strSplit.length;
+			return mod > 0 ? tot + frac - 1 : tot + frac;
 		}
-	});
-	return eLevel === emojiLevel.all ? cnt / strSplit.length : cnt;
+		return tot + cnt;
+	};
+	len += Ascii.split('|').reduce(asciiCalc, 0);
+
+	return len + nonAscii.length;
 }
 
 /**
@@ -56,19 +84,20 @@ export function getStringSize(
 	eLevel = emojiLevel.all,
 ): stringSize {
 	const result: stringSize = {
-		maxSize: 0,
-		minSize: 0,
+		size: 0,
 		val: '',
 	};
-	if (!val) return result;
-	// eslint-disable-next-line prettier/prettier
-	result.val = val.toString().trim().replace(/\t/g, fillSpace(tabSize));
+	if (!val.toString()) return result;
+	result.val = val
+		.toString()
+		// eslint-disable-next-line prettier/prettier, no-control-regex
+		.replace(/.?[\u0008\b]/g, '')
+		.replace(/\t/g, fillSpace(tabSize));
 	const splt = result.val.replace(/\r?[\n\r]\r?/g, '|<S>|').split('|<S>|');
 
 	const sizer = (str): void => {
-		// eslint-disable-next-line no-control-regex
-		const s = str.replace(/.\u0008/g, '').replace(/\v\f/g, '');
-		result.maxSize = Math.max(result.maxSize, getCleanSize(s, eLevel));
+		const s = str.replace(/[\v\f]/g, '');
+		result.size = Math.max(result.size, getCleanSize(s, eLevel));
 	};
 
 	splt.forEach(str => sizer(str));
@@ -80,6 +109,7 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 	if (size === 0) return lines;
 
 	let currSize = 0;
+	let returnline = '';
 	let curr = '';
 	let currShort = '';
 
@@ -149,6 +179,7 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 			if (getCleanSize(tmp, eLevel) === size) {
 				lines.push(tmp);
 				curr = '';
+				returnline = '';
 			} else curr = tmp;
 			currSize = getCleanSize(curr, eLevel);
 		} else {
@@ -189,6 +220,7 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 				}
 				break;
 			case '\r':
+				returnline = curr + (curr !== '' && currShort !== '' ? ' ' : '') + currShort;
 				curr = '';
 				currShort = '';
 				currSize = 0;
@@ -212,17 +244,31 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 		endSpace();
 		if (curr !== '') lines.push(curr);
 	}
+	if (returnline) {
+		const idx = lines.length - 1;
+		const last = lines[idx];
+		const lastlen = getCleanSize(last);
+		const returnlen = getCleanSize(returnline);
+		if (returnlen > lastlen) {
+			lines[idx] += returnline.substr(lastlen);
+		}
+	}
 	return lines;
 }
 
 export function isNum(val: unknown): boolean {
+	if (val == null) return false;
 	const v = val.toString();
 	if (/-{0,1}\d+(\.\d+)?/.test(v)) return true;
 	return false;
 }
 
+export function addSpecialEmo(emo: string | string[]): void {
+	if (Array.isArray(emo)) specialEmo.push(...emo);
+	else specialEmo.push(emo);
+}
+
 export type stringSize = {
-	minSize: number;
-	maxSize: number;
+	size: number;
 	val: string;
 };

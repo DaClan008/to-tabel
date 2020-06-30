@@ -94,7 +94,7 @@ export class ColumnInfo extends EventEmitter {
 			const size = getStringSize(val, this.tabSize, this.eLevel);
 			const max = this.maxSize;
 			this.prntName = size.val;
-			this.headerMaxSize = size.maxSize;
+			this.headerMaxSize = size.size;
 			this.setRatio();
 			if (max !== this.maxSize) this.emit(Events.EventChangeMax, this);
 			this.buildLines();
@@ -408,8 +408,8 @@ export class ColumnInfo extends EventEmitter {
 		for (let i = 0, len = data.length; i < len; i++) {
 			let size = getStringSize(data[i], this.tableSize, this.eLevel);
 			let line = data[i];
-			if (size.maxSize < workSize || workSize === -1) {
-				const diff = workSize - size.maxSize;
+			if (size.size < workSize || workSize === -1) {
+				const diff = workSize - size.size;
 				switch (align) {
 					case Alignment.center:
 						line = fillSpace(Math.floor(diff / 2), ' ') + line;
@@ -423,12 +423,12 @@ export class ColumnInfo extends EventEmitter {
 						break;
 				}
 				result.push(line);
-			} else if (size.maxSize > workSize) {
+			} else if (size.size > workSize) {
 				for (let x = line.length - 1; x >= 0; x--) {
 					let tmp = line.slice(0, x);
 					size = getStringSize(tmp, this.tabSize, this.eLevel);
-					if (size.maxSize <= workSize) {
-						const diff = workSize - size.maxSize;
+					if (size.size <= workSize) {
+						const diff = workSize - size.size;
 						switch (this.align) {
 							case Alignment.center:
 								tmp = fillSpace(Math.floor(diff / 2), ' ') + tmp;

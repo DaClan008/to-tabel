@@ -446,8 +446,8 @@ export class CombinedInfo extends EventEmitter {
 		for (let i = 0, len = data.length; i < len; i++) {
 			let size = getStringSize(data[i], this.tabSize, this.eLevel);
 			let line = data[i];
-			if (size.maxSize < workSize) {
-				const diff = workSize - size.maxSize;
+			if (size.size < workSize) {
+				const diff = workSize - size.size;
 				switch (align) {
 					case Alignment.center:
 						line = fillSpace(Math.floor(diff / 2), ' ') + line;
@@ -461,7 +461,7 @@ export class CombinedInfo extends EventEmitter {
 						break;
 				}
 				result.push(line);
-			} else if (size.maxSize > workSize) {
+			} else if (size.size > workSize) {
 				if (workSize <= 0) {
 					result.push('');
 					continue;
@@ -469,8 +469,8 @@ export class CombinedInfo extends EventEmitter {
 				for (let x = line.length - 1; x >= 0; x--) {
 					let tmp = line.slice(0, x);
 					size = getStringSize(tmp, this.tabSize, this.eLevel);
-					if (size.maxSize <= workSize) {
-						const diff = workSize - size.maxSize;
+					if (size.size <= workSize) {
+						const diff = workSize - size.size;
 						switch (this.align) {
 							case Alignment.center:
 								tmp = fillSpace(Math.floor(diff / 2), ' ') + tmp;

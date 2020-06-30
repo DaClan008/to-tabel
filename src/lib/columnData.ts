@@ -19,7 +19,7 @@ export class ColumnData extends BaseData {
 		super(key, row);
 		const size = getStringSize(val || '', tabSpace, eLevel);
 		this.val = size.val;
-		this.max = size.maxSize;
+		this.max = size.size;
 		this.lines = getStringLines(this.val, -1, this.eLevel);
 	}
 
