@@ -1,4 +1,5 @@
 import ansi from 'ansi-regex';
+import { check } from 'prettier';
 import { emojiLevel } from '../types/options';
 
 const ansiRegex = ansi();
@@ -24,7 +25,10 @@ export function fillSpace(size = 1, char = ' '): string {
 export function getCleanSize(val: string, eLevel = emojiLevel.all): number {
 	// strip ansi
 	let v = val.replace(ansiRegex, '');
-	if (eLevel === emojiLevel.none) return v.length;
+	// eslint-disable-next-line no-control-regex
+	if (eLevel === emojiLevel.none || !/[^\x00-\x7f]/.test(v)) {
+		return v.length;
+	}
 	const specials = new RegExp(`(${specialEmo.join('|')})`);
 	let len = 0;
 
@@ -43,7 +47,9 @@ export function getCleanSize(val: string, eLevel = emojiLevel.all): number {
 	const join = '\u{200D}';
 
 	const asciiCalc = (tot: number, str: string): number => {
-		if (!str) return 0;
+		if (!str) {
+			return 0;
+		}
 		let cnt = 0;
 
 		const strSplit = str.split(join);
@@ -104,10 +110,126 @@ export function getStringSize(
 	return result;
 }
 
-export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all): string[] {
-	const lines: string[] = [];
-	if (size === 0) return lines;
+export function getComplexUniArray(valStr: string, size = -1, eLevel = emojiLevel.all): string[] {
+	if (!valStr || size === 0 || size < -1) return [''];
+	if (size === -1) return [valStr];
+	const asciiChars = valStr
+		// eslint-disable-next-line no-control-regex
+		.replace(/[\x00-\x7f]/g, '|')
+		.split('|')
+		.filter(asci => asci !== '');
+	// eslint-disable-next-line no-control-regex
+	const nonAscArr = eLevel === emojiLevel.none ? valStr : valStr.split(/[^\x00-\x7f]/);
+	const resultStr: string[] = [];
 
+	let run = '';
+	let runSize = 0;
+
+	const checkRun = () => {
+		if (runSize >= size) {
+			runSize = 0;
+			if (!run) return;
+			resultStr.push(run);
+			run = '';
+		}
+	};
+
+	// find a single emoji character from multiple unicode chars
+	const findSingle = (val: string): string => {
+		let single = '';
+		let prev = '';
+		let running = '';
+		let sze = 0;
+		for (let i = 0, len = val.length; i < len; i++) {
+			running += val[i];
+			sze = getCleanSize(running, eLevel);
+			if (sze > 1 && single === '') single = prev;
+			else if (sze === 1) single = '';
+			prev = running;
+		}
+		if (sze === 1 && single === '') single = running;
+		return single;
+	};
+
+	// find all single emoji chars from multiple unicode chars
+	const findAllSingles = (val: string): void => {
+		const list = [];
+		let v = val;
+		while (v.length) {
+			list.push(findSingle(v));
+			v = v.substring(list[list.length - 1].length);
+		}
+		list.forEach(single => {
+			checkRun();
+			run += single;
+			runSize++;
+		});
+	};
+
+	// add a word that is longer than size
+	const addWord = (val: string): void => {
+		let v: string;
+		if (runSize - size >= size) {
+			const diff = runSize - size;
+			run += val.substring(0, val.length - diff);
+			v = val.substring(val.length - diff);
+		} else v = val;
+		while (v) {
+			checkRun();
+			run = v.substring(0, size);
+			runSize = size;
+			v = v.substring(size);
+		}
+	};
+
+	// add a complex text string (no unicode)
+	const addString = (val: string) => {
+		val.split(' ').forEach((v, idx) => {
+			checkRun();
+			runSize += v === '' ? 1 : (idx > 0 && run ? 1 : 0) + v.length;
+			const old = runSize - v.length;
+			if (runSize <= size) {
+				run += v === '' ? ' ' : (idx > 0 && run ? ' ' : '') + v;
+				return;
+			}
+			if (v.length > size + (old > 0 ? size - old : 0)) addWord((idx > 0 ? ' ' : '') + v);
+			else {
+				const addition = v.substring(0, Math.max(0, size - old));
+				/* istanbul ignore next: no test ran with run or addition values being '' */
+				resultStr.push(run + (run && addition ? ' ' : '') + addition);
+				run = v.substring(size - old);
+				runSize = run.length;
+			}
+		});
+	};
+
+	for (let i = 0, len = nonAscArr.length; i < len; i++) {
+		checkRun();
+		if (nonAscArr[i] === '') {
+			const uni = asciiChars.shift();
+			/* istanbul ignore if: safety check */
+			if (!uni) continue;
+			findAllSingles(uni);
+			i += uni.length - 1;
+		} else {
+			const diff = size - runSize;
+			if (diff >= nonAscArr[i].length) {
+				run += nonAscArr[i];
+				runSize += nonAscArr[i].length;
+			} else addString(nonAscArr[i]);
+		}
+	}
+	/* istanbul ignore else: no else */
+	if (run) resultStr.push(run);
+
+	return resultStr;
+}
+
+export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all): string[] {
+	if (!str || size === 0 || size < -1) return [''];
+	if (size === -1) return [str];
+
+	const lines: string[] = [];
 	let currSize = 0;
 	let returnline = '';
 	let curr = '';
@@ -116,29 +238,12 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 	const removeChar = (removeStr): string => {
 		let tmp = removeStr;
 		const startLen = getCleanSize(tmp, eLevel);
-		if (startLen <= 1) return '';
 
 		while (getCleanSize(tmp, eLevel) !== startLen - 1 && tmp !== '') {
-			tmp = tmp.slice(0, tmp.length);
+			tmp = tmp.slice(0, tmp.length - 1);
 		}
 
 		return tmp;
-	};
-
-	// testing 8 chars ahead for special unicode combinations.
-	const cleanChar = (testStr: string, start = 0): number => {
-		let answer = 0;
-		let tmp = '';
-		const end = Math.min(testStr.length, start + 8);
-		const char8 = testStr + str.slice(start + 1, end);
-		const cleanSz = getCleanSize(char8, eLevel);
-		if (cleanSz === end - start) return start;
-		// return the last
-		for (let i = start; i < end; i++) {
-			tmp += str[i];
-			if (getCleanSize(tmp, eLevel) === 1) answer = i;
-		}
-		return answer;
 	};
 
 	const endSpace = (): void => {
@@ -147,8 +252,10 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 			lines.push(curr);
 			curr = '';
 			currSize = 0;
+			returnline = '';
 		}
 
+		/* istanbul ignore next: currSize > 0 never hit */
 		if (currSize + shortLen + (curr !== '' ? 1 : 0) <= size || (size === -1 && currSize > 0)) {
 			if (curr !== '') {
 				curr += ' ';
@@ -157,31 +264,17 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 			curr += currShort;
 			currSize += shortLen;
 		} else if (shortLen > size) {
-			// we need to split up shortLen
-			let tmp = curr;
-			let complex = currShort.length !== getCleanSize(currShort, eLevel);
-			curr = '';
-			tmp += tmp === '' ? '' : ' ';
-
-			for (let i = 0, len = currShort.length; i < len; i++) {
-				if (getCleanSize(tmp, eLevel) === size) {
-					lines.push(tmp);
-					tmp = '';
-					const newCurr = currShort.slice(i);
-					complex = newCurr.length !== getCleanSize(newCurr, eLevel);
-				}
-				const to = complex ? cleanChar(currShort, i) : i;
-				if (to !== i) {
-					tmp += currShort.slice(i, to - i + 1);
-					i = to;
-				} else tmp += currShort[i];
-			}
-			if (getCleanSize(tmp, eLevel) === size) {
-				lines.push(tmp);
-				curr = '';
-				returnline = '';
-			} else curr = tmp;
-			currSize = getCleanSize(curr, eLevel);
+			/* istanbul ignore next: empty string just for safety */
+			let tmp = curr ? curr + (currShort ? ' ' : '') : '';
+			tmp += currShort;
+			const arr = getComplexUniArray(tmp, size, eLevel);
+			/* istanbul ignore next: empty string just for safety */
+			const last = arr.pop() || '';
+			/* istanbul ignore else: no else */
+			if (arr.length > 0) lines.push(...arr);
+			curr = last;
+			currSize = getCleanSize(curr);
+			currShort = '';
 		} else {
 			lines.push(curr);
 			curr = currShort;
@@ -191,15 +284,17 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 	};
 
 	for (let i = 0, len = str.length; i < len; i++) {
-		const char = str[i];
+		const char = str.charAt(i);
 
 		switch (char) {
 			case ' ':
 				endSpace();
 				break;
 			case '\n':
+				/* istanbul ignore else: no else */
 				if (currShort !== '') {
 					endSpace();
+					/* istanbul ignore else: no else */
 					if (curr !== '') {
 						lines.push(curr);
 						curr = '';
@@ -215,23 +310,33 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 			case '\b':
 				if (currShort !== '') currShort = removeChar(currShort);
 				else if (curr !== '') {
-					curr = removeChar(curr);
-					currSize = getCleanSize(curr, eLevel);
+					currShort = curr;
+					curr = '';
+					currSize = 0;
 				}
 				break;
 			case '\r':
 				returnline = curr + (curr !== '' && currShort !== '' ? ' ' : '') + currShort;
-				curr = '';
+				if (getCleanSize(currShort) + currSize <= size) {
+					curr = '';
+					currSize = 0;
+				}
 				currShort = '';
-				currSize = 0;
 				break;
 			case '\f':
 			// break omitted
 			case '\v':
 				endSpace();
+				/* istanbul ignore else: no else */
 				if (curr !== '') {
-					lines.push(curr);
-					curr = fillSpace(curr.length, ' ');
+					currShort = fillSpace(currSize, ' ');
+					if (currShort.length === size) currShort = '';
+					/* istanbul ignore else: no else */
+					if (curr !== '') {
+						lines.push(curr);
+						curr = '';
+						currSize = 0;
+					}
 				}
 				break;
 			default:
@@ -240,8 +345,10 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 		}
 	}
 
+	/* istanbul ignore else: no else */
 	if (currShort !== '') {
 		endSpace();
+		/* istanbul ignore else: no else */
 		if (curr !== '') lines.push(curr);
 	}
 	if (returnline) {
@@ -249,9 +356,8 @@ export function getStringLines(str: string, size = -1, eLevel = emojiLevel.all):
 		const last = lines[idx];
 		const lastlen = getCleanSize(last);
 		const returnlen = getCleanSize(returnline);
-		if (returnlen > lastlen) {
-			lines[idx] += returnline.substr(lastlen);
-		}
+		/* istanbul ignore else: no else */
+		if (returnlen > lastlen) lines[idx] += returnline.substr(lastlen);
 	}
 	return lines;
 }
