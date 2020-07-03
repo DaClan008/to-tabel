@@ -5,7 +5,6 @@ import {
 	getStringSize,
 	getStringLines,
 	isNum,
-	getComplexUniArray,
 } from '../src/lib/helper';
 import { emojiLevel } from '../src/types/options';
 
@@ -252,7 +251,7 @@ describe('testing string lines', () => {
 		const str = 'This is a testing str';
 		expect(getStringLines(str, 5, emojiLevel.all)).toEqual([
 			'This',
-			'is a ',
+			'is a',
 			'testi',
 			'ng',
 			'str',
@@ -272,19 +271,36 @@ describe('testing string lines', () => {
 		expect(getStringLines(str, 4)).toEqual(['This', 'is', 'a te', 'stin', 'g', 'str']);
 		expect(getStringLines(str, 7)).toEqual(['This is', 'a', 'testing', 'str']);
 		str = '\nThis is a testing str';
-		expect(getStringLines(str, 7)).toMatchObject(['', 'This is', 'a', 'testing', 'str']);
+		expect(getStringLines(str, 7)).toMatchObject(['This is', 'a', 'testing', 'str']);
 	});
 
 	// NOTE - this should not be applicable in table anymore!!
 	// this is dealt with in getStringSize function.
 	test('should return multiple lines which use backspace char', () => {
 		let str = 'This is\b a testing str';
-		expect(getStringLines(str, 4)).toEqual(['This', 'i a ', 'test', 'ing', 'str']);
-		expect(getStringLines(str, 7)).toEqual(['This i', 'a', 'testing', 'str']);
+		expect(getStringLines(str, 4)).toEqual(['This', 'i a', 'test', 'ing', 'str']);
+		expect(getStringLines(str, 7)).toEqual(['This is', 'a', 'testing', 'str']);
 		str = '\u0008This is a testing str';
 		expect(getStringLines(str, 7)).toMatchObject(['This is', 'a', 'testing', 'str']);
 		str = 'This \u0008is a testing str';
 		expect(getStringLines(str, 7)).toMatchObject(['Thisis', 'a', 'testing', 'str']);
+	});
+
+	test('should deal with complicated backspace chars', () => {
+		let str = 'This is\n\ba testing str';
+		expect(getStringLines(str, 8)).toEqual(['This isa', 'testing', 'str']);
+
+		str = 'This is\b\ba testing str';
+		expect(getStringLines(str, 8)).toEqual(['This isa', 'testing', 'str']);
+
+		str = 'This is😀\b a testing str';
+		expect(getStringLines(str, 7)).toEqual(['This is', 'a', 'testing', 'str']);
+		expect(getStringLines(str, 7, emojiLevel.none)).toEqual([
+			'This is',
+			'\uD83D a',
+			'testing',
+			'str',
+		]);
 	});
 
 	test('should return lines if a return line char is used', () => {
@@ -292,12 +308,26 @@ describe('testing string lines', () => {
 		expect(getStringLines(str, 4)).toEqual(['This', 'a te', 'stin', 'g', 'str']);
 
 		str = 'This\r is a testing str';
-		expect(getStringLines(str, 4)).toEqual(['is a', 'test', 'ing', 'str']);
+		expect(getStringLines(str, 4)).toEqual(['This', 'is a', 'test', 'ing', 'str']);
+
+		str = 'This\r is a testing str';
+		expect(getStringLines(str, 5)).toEqual(['is a', 'testi', 'ng', 'str']);
+
 		str = 'This \ris a testing str';
-		expect(getStringLines(str, 4)).toEqual(['is a', 'test', 'ing', 'str']);
+		expect(getStringLines(str, 4)).toEqual(['This', 'is a', 'test', 'ing', 'str']);
 
 		str = 'This is a te\rsting str';
-		expect(getStringLines(str, 12)).toEqual(['sting str te']);
+		expect(getStringLines(str, 12)).toEqual(['This is a te', 'sting str']);
+		expect(getStringLines(str, 13)).toEqual(['sting str te']);
+	});
+
+	test('should deal with complex return line strings', () => {
+		let str = 'This\r is a tes\rting str';
+		expect(getStringLines(str, 4)).toEqual(['This', 'is a', 'ting', 'str']);
+		expect(getStringLines(str, 5)).toEqual(['is a', 'ting', 'str']);
+		expect(getStringLines(`\r${str}`, 4)).toEqual(['This', 'is a', 'ting', 'str']);
+		str = 'This\r\r is a tes\r\rting str';
+		expect(getStringLines(str, 4)).toEqual(['This', 'is a', 'ting', 'str']);
 	});
 
 	test('should deal with \\f and \\v special characters', () => {
@@ -353,25 +383,25 @@ describe('testing string lines', () => {
 	});
 });
 
-describe('Testing getComplexuniArray', () => {
-	test('should take in odd size', () => {
-		const str = 'This is a testing str';
-		expect(getComplexUniArray(str)).toEqual(['This is a testing str']);
-		expect(getComplexUniArray(str, 0)).toEqual(['']);
-	});
+// describe('Testing getComplexuniArray', () => {
+// 	test('should take in odd size', () => {
+// 		const str = 'This is a testing str';
+// 		expect(getComplexUniArray(str)).toEqual(['This is a testing str']);
+// 		expect(getComplexUniArray(str, 0)).toEqual(['']);
+// 	});
 
-	test('should take in odd emojilevels', () => {
-		const str = 'This 😀is a testing str';
-		expect(getComplexUniArray(str, 6, emojiLevel.none)).toEqual([
-			'This \uD83D',
-			'\uDE00is a ',
-			'testin',
-			'g str',
-		]);
-	});
+// 	test('should take in odd emojilevels', () => {
+// 		const str = 'This 😀is a testing str';
+// 		expect(getComplexUniArray(str, 6, emojiLevel.none)).toEqual([
+// 			'This \uD83D',
+// 			'\uDE00is a ',
+// 			'testin',
+// 			'g str',
+// 		]);
+// 	});
 
-	test('should return on strange string', () => {
-		let str = 'This  is  a testing str';
-		expect(getComplexUniArray(str, 11, emojiLevel.med)).toEqual(['This  is  a', 'testing str']);
-	});
-});
+// 	test('should return on strange string', () => {
+// 		let str = 'This  is  a testing str';
+// 		expect(getComplexUniArray(str, 11, emojiLevel.med)).toEqual(['This  is  a', 'testing str']);
+// 	});
+// });

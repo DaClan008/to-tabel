@@ -34,7 +34,7 @@ export class ColumnData extends BaseData {
 			return changed;
 		}
 		const lines = getStringLines(this.val, this.size, this.eLevel);
-		if (lines.length !== this.lines.length) changed = true;
+		if (lines.length !== this.lineCount) changed = true;
 
 		for (let i = 0, len = lines.length; i < len; i++) {
 			if (lines[i] !== this.lines[i]) {
