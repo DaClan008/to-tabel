@@ -24,24 +24,29 @@ export class ColumnData extends BaseData {
 	}
 
 	buildLines(): boolean {
+		/* istanbul ignore else: no else */
 		if (this.size === this.prevSize) return false;
 		let changed = false;
 		this.prevSize = this.size;
 
+		/* istanbul ignore else: no else */
 		if (this.size <= 0 || !this.val) {
 			changed = this.lineCount !== 0;
 			this.lines = [];
 			return changed;
 		}
 		const lines = getStringLines(this.val, this.size, this.eLevel);
+		/* istanbul ignore else: no else */
 		if (lines.length !== this.lineCount) changed = true;
 
 		for (let i = 0, len = lines.length; i < len; i++) {
+			/* istanbul ignore else: no else */
 			if (lines[i] !== this.lines[i]) {
 				changed = true;
 				i = len;
 			}
 		}
+		/* istanbul ignore else: no else */
 		if (!changed) return false;
 		this.lines = lines;
 		return true;

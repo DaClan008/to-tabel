@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import * as Events from './events';
 
 export abstract class BaseData extends EventEmitter {
+	/* istanbul ignore next: default keys should not be relevant in table */
 	constructor(readonly key = '', readonly row = -1) {
 		super();
 	}
@@ -17,14 +18,17 @@ export abstract class BaseData extends EventEmitter {
 	abstract get lines(): string[];
 
 	set altered(val: boolean) {
+		/* istanbul ignore if: false is never called in table - safety */
 		if (!val) return;
 
 		// build lines
+		/* istanbul ignore else: no else */
 		if (this.buildLines()) this.emit(Events.EventDataChanged, this);
 	}
 
 	/** Get or set the size of the column */
 	set size(val: number) {
+		/* istanbul ignore else: no else */
 		if (val !== this.sze) {
 			this.sze = Math.max(-1, val);
 			this.altered = true;
@@ -36,7 +40,7 @@ export abstract class BaseData extends EventEmitter {
 	}
 
 	/** Get the internal size of the column. (i.e. it returns the actually set value only) */
-	get internalSize(): number {
+	get setSize(): number {
 		return this.sze;
 	}
 

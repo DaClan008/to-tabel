@@ -208,10 +208,10 @@ export class Table extends BaseData {
 
 	/** Returns the maximum table size excluding outerborder and margin */
 	get space(): number {
-		if (this.internalSize === 0) return 0;
+		if (this.setSize === 0) return 0;
 		const ignore = this.margin + this.lBorder + this.rBorder + this.padding * 2;
-		if (this.internalSize > 0) {
-			return this.internalSize - (this.internalSize - ignore > 0 ? ignore : 0);
+		if (this.setSize > 0) {
+			return this.setSize - (this.setSize - ignore > 0 ? ignore : 0);
 		}
 		if (this.maxsize > 0) {
 			return this.maxsize - (this.maxsize - ignore > 0 ? ignore : 0);
