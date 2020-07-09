@@ -1,7 +1,7 @@
 import { ColumnData } from '../src/lib/columnData';
 import * as Events from '../src/lib/events';
 
-describe('some test', () => {
+describe('Testing ColumnDta object', () => {
 	test('creating Column Data objects', () => {
 		const obj = new ColumnData('col1', 'in column1', 2, 1);
 		expect(obj).toMatchObject({

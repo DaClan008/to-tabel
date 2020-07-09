@@ -1,6 +1,7 @@
 /* eslint-disable no-control-regex */
 import ansi from 'ansi-regex';
-import { emojiLevel } from '../types/options';
+import { emojiLevel, Alignment } from '../types/options';
+import { IColumnSize } from './interfaces';
 
 const ansiRegex = ansi();
 
@@ -275,11 +276,63 @@ export function getStringLines(valStr: string, size = -1, eLevel = emojiLevel.al
 
 	return resultStr;
 }
+/**
+ * Convert an array of strings to match the correct size per string.
+ * @param {string[]} data The data to correct if needs be.
+ * @param {IColumnSize} colSize A columnInfo object to establish the correct sizes with.
+ * @param {boolean} header If true, the info relate to the header component
+ * (applicable if table is not flat).  Else the data relate to the content.
+ * @returns {string[]}
+ */
+export function fillLine(data: string[], colSize: IColumnSize, header = false): string[] {
+	if (!data || data.length === 0 || colSize == null) return [];
+	const result: string[] = [];
+	const workSize = colSize.ratio
+		? header
+			? colSize.headerSize
+			: colSize.contentSize
+		: colSize.size;
+	const align = header ? colSize.headAlign : colSize.align;
+
+	const split = (diff: number, lne: string): string => {
+		const left = Math.floor(diff / 2);
+		return `${fillSpace(left)}${lne}${fillSpace(diff - left)}`;
+	};
+
+	data.forEach(line => {
+		let size = getStringSize(line, colSize.tabSize, colSize.eLevel);
+		let current = line;
+		if (size.size === workSize) current = line;
+		else if (size.size < workSize) {
+			const diff = workSize - size.size;
+			switch (align) {
+				case Alignment.center:
+					current = split(diff, current);
+					break;
+				case Alignment.right:
+					current = fillSpace(diff) + current;
+					break;
+				default:
+					current += fillSpace(diff);
+					break;
+			}
+		} else {
+			size = getStringSize(line.slice(0, -1), colSize.tabSize, colSize.eLevel);
+			while (size.size < workSize) {
+				size = getStringSize(size.val.slice(0, -1), colSize.tabSize, colSize.eLevel);
+			}
+			current = size.val;
+		}
+		if (current.trim()) result.push(current);
+	});
+
+	return result;
+}
 
 export function isNum(val: unknown): boolean {
 	if (val == null) return false;
 	const v = val.toString();
-	if (/-{0,1}\d+(\.\d+)?/.test(v)) return true;
+	if (/^-{0,1}\d+(\.\d+)?$/.test(v)) return true;
 	return false;
 }
 

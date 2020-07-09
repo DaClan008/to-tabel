@@ -4,8 +4,9 @@ import * as Events from './events';
 import { ColumnInfo } from './columnInfo';
 import { Alignment, emojiLevel } from '../types/options';
 import { fillSpace, getStringSize } from './helper';
+import { IColumnSize } from './interfaces';
 
-export class CombinedInfo extends EventEmitter {
+export class CombinedInfo extends EventEmitter implements IColumnSize {
 	// #region private variables ----------------------------------------------
 	private max = 0;
 
@@ -34,7 +35,7 @@ export class CombinedInfo extends EventEmitter {
 
 	/** Returns the percentage in terms of table size vs column size */
 	get percentage(): boolean {
-		return this.nmeCol.percentage || this.numCol.percentage;
+		return this.nmeCol.isPercent || this.numCol.isPercent;
 	}
 
 	get tabSize(): number {
@@ -430,66 +431,6 @@ export class CombinedInfo extends EventEmitter {
 	reset(): void {
 		this.nmeCol.reset();
 		this.numCol.reset();
-	}
-
-	/**
-	 * Return a string array to ensure proper alignement of content (header or data).
-	 * @param {string[]} data The data to correctly align.
-	 * @param {boolean} header Set as ture if dealing with header column.  Default is false.
-	 * @returns {string[]} a properly aligned array of data.
-	 */
-	fillLine(data: string[], header = false): string[] {
-		const result: string[] = [];
-		const workSize = this.ratio ? (header ? this.headerSize : this.contentSize) : this.size;
-		const align = header ? this.headAlign : this.align;
-
-		for (let i = 0, len = data.length; i < len; i++) {
-			let size = getStringSize(data[i], this.tabSize, this.eLevel);
-			let line = data[i];
-			if (size.size < workSize) {
-				const diff = workSize - size.size;
-				switch (align) {
-					case Alignment.center:
-						line = fillSpace(Math.floor(diff / 2), ' ') + line;
-						line += fillSpace(diff - Math.floor(diff / 2), ' ');
-						break;
-					case Alignment.right:
-						line = fillSpace(diff, ' ') + line;
-						break;
-					default:
-						line += fillSpace(diff, ' ');
-						break;
-				}
-				result.push(line);
-			} else if (size.size > workSize) {
-				if (workSize <= 0) {
-					result.push('');
-					continue;
-				}
-				for (let x = line.length - 1; x >= 0; x--) {
-					let tmp = line.slice(0, x);
-					size = getStringSize(tmp, this.tabSize, this.eLevel);
-					if (size.size <= workSize) {
-						const diff = workSize - size.size;
-						switch (this.align) {
-							case Alignment.center:
-								tmp = fillSpace(Math.floor(diff / 2), ' ') + tmp;
-								tmp += fillSpace(diff - Math.floor(diff / 2), ' ');
-								break;
-							case Alignment.right:
-								tmp = fillSpace(diff, ' ') + tmp;
-								break;
-							default:
-								tmp += fillSpace(diff, ' ');
-								break;
-						}
-						result.push(tmp);
-						x = 0;
-					}
-				}
-			} else result.push(line);
-		}
-		return result.length === 0 ? [''] : result;
 	}
 
 	/**

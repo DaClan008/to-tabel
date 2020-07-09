@@ -15,7 +15,7 @@ import {
 	// eslint-disable-next-line object-curly-newline
 } from '../types/options';
 import { ColumnInfo, colOptions } from './columnInfo';
-import { fillSpace, isNum, getStringSize } from './helper';
+import { fillSpace, isNum, getStringSize, fillLine } from './helper';
 import { CombinedInfo } from './combinedInfo';
 
 export class Table extends BaseData {
@@ -1147,7 +1147,7 @@ export class Table extends BaseData {
 					return;
 				}
 				const NAME = this.newData[idx][name] ? name : name2;
-				info.lines = col.fillLine(this.newData[idx][NAME].lines);
+				info.lines = fillLine(this.newData[idx][NAME].lines, col);
 				if (!flat) {
 					value = [];
 					max = Math.max(col.lines.length, info.lines.length);
@@ -1213,7 +1213,7 @@ export class Table extends BaseData {
 			}
 			result[nme].on(Events.EventDataChanged, this.dataChangeEvent);
 			// match up colsize and datasize
-			if (this.cols[nme]) this.cols[nme].maxSize = result[nme].maxData;
+			if (this.cols[nme]) this.cols[nme].maxContent = result[nme].maxData;
 			else if (noCols[nme]) noCols[nme] = Math.max(noCols[nme], result[nme].maxData);
 			else noCols[nme] = result[nme].maxData || 0;
 		};
@@ -1246,7 +1246,7 @@ export class Table extends BaseData {
 		// update columns added
 		const keys = Object.keys(noCols);
 		keys.forEach(key => {
-			if (this.cols[key]) this.cols[key].maxSize = noCols[key];
+			if (this.cols[key]) this.cols[key].maxContent = noCols[key];
 		});
 	}
 

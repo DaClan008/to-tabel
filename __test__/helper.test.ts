@@ -8,7 +8,7 @@ import {
 } from '../src/lib/helper';
 import { emojiLevel } from '../src/types/options';
 
-describe.skip('testing isNum function', () => {
+describe('testing isNum function', () => {
 	test('must return true if text is a number', () => {
 		expect(isNum('0')).toBe(true);
 		expect(isNum(1)).toBe(true);
@@ -21,7 +21,7 @@ describe.skip('testing isNum function', () => {
 	});
 });
 
-describe.skip('testing size calculation', () => {
+describe('testing size calculation', () => {
 	test('must return a normal string size', () => {
 		const someStr = 'This is some string.';
 		expect(getCleanSize(someStr, emojiLevel.none)).toEqual(someStr.length);
@@ -105,7 +105,7 @@ describe.skip('testing size calculation', () => {
 	});
 });
 
-describe.skip('testing fillSpace', () => {
+describe('testing fillSpace', () => {
 	test('should fill with spaces', () => {
 		const str = fillSpace(4);
 		expect(str).toBe('    ');
@@ -129,7 +129,7 @@ describe.skip('testing fillSpace', () => {
 	});
 });
 
-describe.skip('testing stringSize (more complex)', () => {
+describe('testing stringSize (more complex)', () => {
 	test('calculating string size reciving odd inputs', () => {
 		expect(getStringSize('')).toMatchObject({
 			size: 0,
@@ -246,7 +246,7 @@ describe.skip('testing stringSize (more complex)', () => {
 	});
 });
 
-describe.skip('testing string lines', () => {
+describe('testing string lines', () => {
 	test('should return multiple lines if size is smaller than text size', () => {
 		const str = 'This is a testing str';
 		expect(getStringLines(str, 5, emojiLevel.all)).toEqual([
