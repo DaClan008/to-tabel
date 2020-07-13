@@ -60,13 +60,13 @@ export class ColumnInfo extends EventEmitter {
 
 	private intRat = 0;
 
-	private get isFixed(): boolean {
+	get isFixed(): boolean {
 		if (!this.fixed || (this.isPercent && this.tableSize < 0)) return false;
 		return true;
 	}
 
 	/** Return true if maxsize was set at startup */
-	private get maxFix(): boolean {
+	get maxFix(): boolean {
 		if (this.setMaxSize < 0 || this.setMaxSize == null) return false;
 		if (this.setMaxSize < 1 && this.table < 0) return false;
 		return true;
@@ -212,7 +212,7 @@ export class ColumnInfo extends EventEmitter {
 		//  - none of the above size = Math.max(0, val); [val limites to 0]
 		//  - size can never be smaller than minimumsize (else it will be 0)
 		//  - size can never be bigger than maximumsize (else it will be maxsize)
-		let amnt = val;
+		let amnt = Math.floor(val);
 		const percent = this.isPercent;
 		if (this.setSize > 0 && this.fixed && val !== 0) {
 			let testAmnt = -1;

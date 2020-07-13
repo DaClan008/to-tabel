@@ -30,7 +30,7 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	// #region properties -----------------------------------------------------
 	/**	Return false if either the number ColumInfo or name ColumnInfo is null, else true. */
 	get proper(): boolean {
-		return this.nmeCol != null && this.numCol != null;
+		return this.nmeCol != null || this.numCol != null;
 	}
 
 	/** Returns the percentage in terms of table size vs column size */
@@ -62,7 +62,10 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 
 	/** Get the lines for the header. */
 	get lines(): string[] {
-		if (this.nmeCol == null) return [];
+		if (this.nmeCol == null) {
+			if (this.numCol == null) return [];
+			return this.numCol.lines;
+		}
 		return this.nmeCol.lines;
 	}
 
@@ -76,16 +79,15 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 		return this.numCol == null ? '' : this.numCol.name;
 	}
 
+	get maxFix(): boolean {
+		return (this.nmeCol && this.nmeCol.maxFix) || (this.numCol && this.numCol.maxFix);
+	}
+
 	/** Get or Set the order number of this object. */
 	get order(): number {
 		const nme = this.nmeCol ? this.nmeCol.order : 0;
 		const num = this.numCol ? this.numCol.order : 0;
 		return Math.max(num, nme, 0);
-	}
-
-	set order(val: number) {
-		if (this.nmeCol.order > 0 || this.numCol.order === 0) this.nmeCol.order = val;
-		else this.numCol.order = val;
 	}
 
 	/** Get the maximum size of the data. */
@@ -94,8 +96,17 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 			this.nmeCol == null ? 0 : this.ratio ? this.nmeCol.maxContent : this.nmeCol.maxSize;
 		const num =
 			this.numCol == null ? 0 : this.ratio ? this.numCol.maxContent : this.numCol.maxSize;
+		const nmeFixed = this.nmeCol && this.nmeCol.maxFix;
+		const numFixed = this.numCol && this.numCol.maxFix;
+		let max = 0;
+
+		if (nmeFixed && !numFixed) max = nme;
+		else if (!nmeFixed && numFixed) max = num;
+		else if (num > 0 && nme > 0) max = Math.min(num, nme);
+		else max = Math.max(nme, num);
+
 		if (this.ratio > 0) {
-			let content = Math.max(nme, num, 0);
+			let content = max;
 			const header = this.maxHeader;
 			const spacer =
 				this.nmeCol == null
@@ -108,7 +119,7 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 			}
 			return header + spacer + content;
 		}
-		return Math.max(nme, num);
+		return max;
 	}
 
 	/** Get the minimum size of the columne. */
@@ -137,19 +148,25 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	/** Get and set the actual size for the column. */
 	get size(): number {
 		let sze = 0;
-		if (this.nmeCol != null && this.nmeCol.fixed) sze = this.nmeCol.size;
-		else if (this.numCol != null && this.numCol.fixed) sze = this.numCol.size;
+		const fixedNme = this.nmeCol && this.nmeCol.isFixed;
+		const fixedNum = this.numCol && this.numCol.isFixed;
+		if (fixedNme && fixedNum) sze = this.nmeCol.size;
+		else if (fixedNme) sze = this.nmeCol.size;
+		else if (fixedNum) sze = this.numCol.size;
 		else {
 			const nme = this.nmeCol != null ? this.nmeCol.size : 0;
 			const num = this.numCol != null ? this.numCol.size : 0;
 			sze = Math.max(nme, num);
 		}
+		sze = this.maxFix && this.maxSize > 0 ? Math.min(sze, this.maxSize) : sze;
 		return sze >= this.minSize ? sze : 0;
 	}
 
 	set size(val: number) {
-		if (this.nmeCol != null) this.nmeCol.size = val;
-		if (this.nmeCol !== this.numCol && this.numCol != null) this.numCol.size = val;
+		let sze = this.maxFix && this.maxSize > 0 ? Math.min(val, this.maxSize) : val;
+		if (sze < this.minSize) sze = 0;
+		if (this.nmeCol != null) this.nmeCol.size = sze;
+		if (this.nmeCol !== this.numCol && this.numCol != null) this.numCol.size = sze;
 	}
 
 	/** Get the size of the header column. */
@@ -180,6 +197,7 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	}
 
 	set ratio(val: number) {
+		/* istanbul ignore else: no else */
 		if (this.nmeCol != null) this.nmeCol.ratio = val;
 		if (this.numCol != null) this.numCol.ratio = val;
 	}
@@ -194,6 +212,7 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	}
 
 	set tableSize(val: number) {
+		/* istanbul ignore else: no else */
 		if (this.nmeCol != null) this.nmeCol.tableSize = val;
 		if (this.numCol != null) this.numCol.tableSize = val;
 	}
@@ -215,21 +234,12 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 		}
 		return Alignment.left;
 	}
-
-	/** Returns true if the size of the column could be changed, else false. */
-	get fixed(): boolean {
-		let val = this.nmeCol == null ? false : this.nmeCol.fixed;
-		if (!val) val = this.numCol == null ? false : this.numCol.fixed;
-		return val;
-	}
 	// #endregion properties --------------------------------------------------
 
 	constructor(nmeInfo: ColumnInfo, numInfo?: ColumnInfo) {
 		super();
 		if (nmeInfo == null && numInfo == null) return;
-		this.compare(nmeInfo || numInfo, numInfo || nmeInfo);
-		if (this.nmeCol.tableSize !== this.tableSize) this.nmeCol.tableSize = this.tableSize;
-		if (this.numCol.tableSize !== this.tableSize) this.numCol.tableSize = this.tableSize;
+		this.compare(nmeInfo, numInfo);
 	}
 
 	// #region Event Handlers -------------------------------------------------
@@ -244,11 +254,10 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 
 	/** Monitor changes to the total size of the column */
 	private sizeEventListener = (): void => {
-		if (this.sze !== this.size) {
-			this.sze = this.size;
-			this.changeEmpties();
-			this.emit(Events.EventChangeSize, this);
-		}
+		if (this.sze === this.size) return;
+		this.sze = this.size;
+		this.changeEmpties();
+		this.emit(Events.EventChangeSize, this);
 	};
 
 	/** Monitor changes to the ratio being set. */
@@ -343,6 +352,8 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 				if (this.nmeCol != null) {
 					this.removeInfo(true, false);
 				}
+				// reset the size variable
+				nmeInfo.size = -1;
 				this.nmeCol = nmeInfo;
 				addListeners(this.nmeCol);
 			}
@@ -353,6 +364,7 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 				if (this.numCol != null) {
 					this.removeInfo(false, false);
 				}
+				numInfo.size = -1;
 				this.numCol = numInfo;
 				if (this.numCol !== this.nmeCol) addListeners(this.numCol);
 			}
@@ -360,46 +372,53 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 
 		if (!this.proper) return;
 
-		this.fixSizes();
+		this.fixSizes(true);
 	}
 
 	/**
 	 * Fixes the sizes to allow internal monitoring of any changes.
 	 */
-	private fixSizes(): void {
+	private fixSizes(silent = false): void {
 		let changed = false;
 		if (this.max !== this.maxSize) {
 			this.max = this.maxSize;
 			changed = true;
-			this.emit(Events.EventChangeMax, this);
+			if (!silent) this.emit(Events.EventChangeMax, this);
 		}
 		if (this.sze !== this.size) {
 			this.sze = this.size;
 			changed = true;
-			this.emit(Events.EventChangeSize, this);
+			if (!silent) this.emit(Events.EventChangeSize, this);
 		}
 		if (this.hSze !== this.headerSize) {
 			this.hSze = this.headerSize;
 			changed = true;
-			this.emit(Events.EventChangeRatio, this);
+			if (!silent) this.emit(Events.EventChangeRatio, this);
 		}
 		if (this.ordr !== this.order) {
 			this.ordr = this.order;
-			this.emit(Events.EventChangeOrder, this);
+			if (!silent) this.emit(Events.EventChangeOrder, this);
 		}
 		if (this.lnes.length !== this.lines.length) {
 			this.fillArray();
-			this.emit(Events.EventChangeLines, this);
+			if (!silent) this.emit(Events.EventChangeLines, this);
 		} else {
 			for (let i = 0, len = this.lines.length; i < len; i++) {
 				if (this.lnes[i] !== this.lines[i]) {
 					this.fillArray();
-					this.emit(Events.EventChangeLines, this);
+					if (!silent) this.emit(Events.EventChangeLines, this);
 					i = len;
 				}
 			}
 		}
 		if (changed) this.changeEmpties();
+		if (this.nmeCol != null) {
+			if (this.nmeCol.tableSize !== this.tableSize) this.nmeCol.tableSize = this.tableSize;
+			if (this.nmeCol.size !== this.size) this.nmeCol.size = this.size;
+		}
+		if (this.numCol == null) return;
+		if (this.numCol.tableSize !== this.tableSize) this.numCol.tableSize = this.tableSize;
+		if (this.numCol.size !== this.size) this.numCol.size = this.size;
 	}
 
 	// #endregion private function --------------------------------------------
@@ -422,9 +441,7 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	 * @param numInfo A potentially new number info object for this object.
 	 */
 	compare(nmeInfo: ColumnInfo, numInfo: ColumnInfo): void {
-		const nme = nmeInfo || numInfo;
-		const num = numInfo || nmeInfo;
-		this.addInfo(nme, num);
+		this.addInfo(nmeInfo, numInfo);
 	}
 
 	/** reset all size values. */

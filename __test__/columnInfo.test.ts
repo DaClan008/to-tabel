@@ -1,7 +1,6 @@
 import { ColumnInfo, colOptions } from '../src/lib/columnInfo';
 import { Alignment } from '../src/types/options';
 import * as Events from '../src/lib/events';
-import { allowedNodeEnvironmentFlags } from 'process';
 
 describe('testing ColumnInfo Object construct', () => {
 	test('creating a ColumnInfo Object', () => {
