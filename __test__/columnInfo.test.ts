@@ -637,13 +637,14 @@ describe('testing ratio property', () => {
 		// activate ratio
 		obj.ratio = 1;
 		expect(obj.ratio).toBe(0.5);
-		// no ratio has really been changed
-		expect(evnt.list).toMatchObject([]);
+		expect(evnt.list).toMatchObject(['size']);
+		evnt.reset();
 		obj.ratio = 0;
 		// deactivate ratio
 		expect(obj.ratio).toBe(0);
 		// no ratio has really been changed
-		expect(evnt.list).toMatchObject([]);
+		expect(evnt.list).toMatchObject(['size']);
+		evnt.reset();
 		obj.maxContent = 3;
 		expect(obj.ratio).toBe(0);
 		// ratio has changed... but deactivated.
@@ -651,8 +652,9 @@ describe('testing ratio property', () => {
 		// reactivate ratio
 		obj.ratio = 1;
 		expect(obj.ratio).toBe(4 / 7);
-		// no change has occured yet
-		expect(evnt.list).toMatchObject([]);
+		// no change has occured except for size chagne
+		expect(evnt.list).toMatchObject(['size']);
+		evnt.reset();
 		obj.maxContent = 7;
 		expect(obj.ratio).toBe(4 / 11);
 		expect(evnt.list).toMatchObject(['max', 'ratio', 'size']);
