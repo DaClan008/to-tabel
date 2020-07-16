@@ -280,7 +280,10 @@ export class ColumnInfo extends EventEmitter {
 		if (ratio) {
 			if (headerSize === 0) return 0;
 			if (this.rat === 1 && this.autoData && !this.isFixed) {
-				return Math.ceil(headerSize / ratio - headerSize);
+				const dataMax = Math.max(0, this.dataMaxSize, this.externalMax);
+				return dataMax === 0 && headerSize > 0
+					? Math.ceil(headerSize / ratio - headerSize)
+					: dataMax;
 			}
 			return size - headerSize - this.space;
 		}
