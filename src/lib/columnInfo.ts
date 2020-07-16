@@ -283,13 +283,6 @@ export class ColumnInfo extends EventEmitter {
 				return Math.ceil(headerSize / ratio - headerSize);
 			}
 			return size - headerSize - this.space;
-			// if (ratio === 1 || this.autoData) {
-			// 	return this.dataMaxSize > 0
-			// 		? this.dataMaxSize
-			// 		: Math.max(0, Math.floor(this.headerMaxSize / (1 - ratio)));
-			// }
-			// if (size - this.space < 0) return 0;
-			// return Math.max(0, Math.floor((1 - ratio) * (size - this.space)));
 		}
 		if (this.autoData) return Math.max(this.headerMaxSize, this.dataMaxSize);
 		return size;
@@ -310,10 +303,6 @@ export class ColumnInfo extends EventEmitter {
 		const old = this.headerSize;
 		this.rat = val;
 		if (this.headerSize !== old) this.emit(Events.EventChangeRatio, this);
-		// if (this.headerSize === old) {
-		// 	if (this.autoData) this.size = -1;
-		// 	return;
-		// }
 
 		if (this.autoData) this.size = -1;
 		if (this.headerSize !== old) this.buildLines();
