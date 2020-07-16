@@ -67,8 +67,8 @@ export class ColumnInfo extends EventEmitter {
 	}
 
 	get isFixed(): boolean {
-		if (!this.fixed || (this.isPercent && this.tableSize < 0)) return false;
-		return true;
+		if (this.fixed || (this.isPercent && this.table > -1)) return true;
+		return false;
 	}
 
 	/** Return true if maxsize was set at startup */
@@ -324,6 +324,7 @@ export class ColumnInfo extends EventEmitter {
 		const max2 = this.maxSize;
 		if (this.maxFix && max !== max2) this.emit(Events.EventChangeMax, this);
 		/* istanbul ignore next: ? -1 not hit */
+		if (!this.isPercent && !this.maxFix) return;
 		if (this.size > max2) this.size = this.isPercent ? -1 : max2;
 		else if (this.isPercent) this.size = -1; // reset size
 	}
@@ -410,7 +411,7 @@ export class ColumnInfo extends EventEmitter {
 		const rat = this.ratio;
 		const header = this.headerSize;
 		const dataMax = Math.max(this.dataMaxSize, this.externalMax, -1);
-		if (dataMax === -1) this.intRat = 0.5;
+		if (dataMax <= 0) this.intRat = 0.5;
 		else {
 			this.intRat = this.headerMaxSize / (this.headerMaxSize + dataMax);
 			this.intRat = Math.min(0.8, Math.max(0.2, this.intRat));
@@ -479,22 +480,23 @@ export class ColumnInfo extends EventEmitter {
 		else this.buildLines();
 	}
 
-	internalSizeChange(val: number): void {
+	internalSizeChange(val: number, fixed = false): void {
 		if (!this.autoData && val === -1) return;
 		const auto = this.autoData;
 		this.size = val;
-		this.autoData = auto;
+		this.autoData = !fixed ? auto : false;
 	}
 
-	setExternalMax(val: number): void {
-		if (val === this.externalMax) return;
+	setExternalMax(val: number, fixedSize = -1): void {
+		if (val === this.externalMax && fixedSize === -1) return;
 		const oldMax = this.maxSize;
 		this.externalMax = Math.max(-1, val);
 		if (!this.maxFix && !this.fixed && oldMax !== this.maxSize) {
 			this.emit(Events.EventChangeMax, this);
 		}
 		this.setRatio();
-		if (this.autoData) this.size = -1;
+		if (fixedSize > -1) this.internalSizeChange(fixedSize, true);
+		else if (this.autoData) this.size = -1;
 		/* istanbul ignore else: no else */ else if (this.rat === 0) this.buildLines();
 	}
 
