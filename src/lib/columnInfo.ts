@@ -50,6 +50,8 @@ export class ColumnInfo extends EventEmitter {
 	/** the actual maximum size of the data in the column (excluding padding). */
 	private dataMaxSize = -1;
 
+	private externalMax = -1;
+
 	/** the actual maximum size of the header of the column (excluding padding) */
 	private headerMaxSize = 0;
 
@@ -59,6 +61,10 @@ export class ColumnInfo extends EventEmitter {
 	private rat = 0;
 
 	private intRat = 0;
+
+	get hasContent(): boolean {
+		return this.dataMaxSize > -1;
+	}
 
 	get isFixed(): boolean {
 		if (!this.fixed || (this.isPercent && this.tableSize < 0)) return false;
@@ -138,10 +144,11 @@ export class ColumnInfo extends EventEmitter {
 			if (this.setMaxSize === 0 || this.setMaxSize >= 1) return this.setMaxSize;
 			return this.setMaxSize * this.tableSize;
 		}
+		const dataMax = Math.max(this.dataMaxSize, this.externalMax, 0);
 		// can still be maxFix but without table size... return real values
 		return this.rat === 0
-			? Math.max(Math.max(this.dataMaxSize, this.headerMaxSize), 0)
-			: Math.max(this.dataMaxSize + this.headerMaxSize + this.space, 0);
+			? Math.max(Math.max(dataMax, this.headerMaxSize), 0)
+			: Math.max(dataMax + this.headerMaxSize + this.space, 0);
 	}
 
 	/** Get the minimum size that the column can be.  Set at startup. */
@@ -162,14 +169,14 @@ export class ColumnInfo extends EventEmitter {
 	 * This ignores maxHeader size.
 	 */
 	get maxContent(): number {
-		return Math.max(0, this.dataMaxSize);
+		return Math.max(0, this.dataMaxSize, this.externalMax);
 	}
 
 	set maxContent(val: number) {
-		const oldDataMax = this.dataMaxSize;
+		const oldDataMax = Math.max(this.dataMaxSize, this.externalMax, 0);
 		const oldMax = this.maxSize;
 		this.dataMaxSize = Math.max(this.dataMaxSize, val);
-		if (oldDataMax === this.dataMaxSize) return;
+		if (oldDataMax === Math.max(this.dataMaxSize, this.externalMax, 0)) return;
 		if (!this.maxFix && !this.fixed && oldMax !== this.maxSize) {
 			this.emit(Events.EventChangeMax, this);
 		}
@@ -188,7 +195,11 @@ export class ColumnInfo extends EventEmitter {
 			if (this.tableSize >= 0) return this.setSize * this.tableSize;
 		} else if (this.fixed) return this.setSize;
 
-		return Math.max(this.setMinSize, Math.max(this.dataMaxSize, this.headerMaxSize), 0);
+		return Math.max(
+			this.setMinSize,
+			Math.max(this.dataMaxSize, this.headerMaxSize, this.externalMax),
+			0,
+		);
 	}
 
 	set size(val: number) {
@@ -224,12 +235,13 @@ export class ColumnInfo extends EventEmitter {
 		const zero = this.real === 0 || amnt === 0 || this.autoData || percent;
 		if ((this.fixed && !zero) || amnt === this.real) return;
 		const oldVal = this.real;
+		const dataMax = Math.max(this.dataMaxSize, this.externalMax, 0);
 		if (amnt < 0) {
 			if (this.setSize > -1 && !percent) this.real = this.setSize;
 			else if (percent && this.tableSize > -1) {
 				this.real = Math.ceil(this.setSize * this.tableSize);
 			} else if (this.rat === 0) this.real = Math.max(0, this.setMinSize, this.maxSize);
-			else this.real = this.dataMaxSize + this.headerMaxSize + this.space;
+			else this.real = dataMax + this.headerMaxSize + this.space;
 			this.autoData = true;
 		} else {
 			this.real = amnt;
@@ -256,7 +268,7 @@ export class ColumnInfo extends EventEmitter {
 			return Math.round((size - this.space) * ratio);
 		}
 		if ((size === -1 || this.autoData) && !this.isFixed) {
-			return Math.max(this.headerMaxSize, this.dataMaxSize);
+			return Math.max(this.headerMaxSize, this.dataMaxSize, this.externalMax);
 		}
 		return size;
 	}
@@ -297,10 +309,14 @@ export class ColumnInfo extends EventEmitter {
 		if (val === this.rat || val < 0 || val > 1) return;
 		const old = this.headerSize;
 		this.rat = val;
-		if (this.headerSize === old) return;
-		this.emit(Events.EventChangeRatio, this);
+		if (this.headerSize !== old) this.emit(Events.EventChangeRatio, this);
+		// if (this.headerSize === old) {
+		// 	if (this.autoData) this.size = -1;
+		// 	return;
+		// }
+
 		if (this.autoData) this.size = -1;
-		else this.buildLines();
+		if (this.headerSize !== old) this.buildLines();
 	}
 
 	/** The size of the table in which collumn will appear (excluding borders & Padding) */
@@ -400,15 +416,18 @@ export class ColumnInfo extends EventEmitter {
 	 */
 	private setRatio(): void {
 		const rat = this.ratio;
-		if (this.dataMaxSize === -1) this.intRat = 0.5;
+		const header = this.headerSize;
+		const dataMax = Math.max(this.dataMaxSize, this.externalMax, -1);
+		if (dataMax === -1) this.intRat = 0.5;
 		else {
-			this.intRat = this.headerMaxSize / (this.headerMaxSize + this.dataMaxSize);
+			this.intRat = this.headerMaxSize / (this.headerMaxSize + dataMax);
 			this.intRat = Math.min(0.8, Math.max(0.2, this.intRat));
 		}
 		// notify
 		if (rat !== this.ratio) {
 			this.emit(Events.EventChangeRatio, this);
 		}
+		if (header !== this.headerSize) this.buildLines();
 	}
 
 	/** build the header lines if needs be. */
@@ -445,6 +464,7 @@ export class ColumnInfo extends EventEmitter {
 	 */
 	reset(): void {
 		this.dataMaxSize = -1;
+		this.externalMax = -1;
 		this.setRatio();
 	}
 
@@ -465,6 +485,25 @@ export class ColumnInfo extends EventEmitter {
 		if (max !== this.maxSize) this.emit(Events.EventChangeMax, this);
 		if (this.autoData) this.size = -1;
 		else this.buildLines();
+	}
+
+	internalSizeChange(val: number): void {
+		if (!this.autoData && val === -1) return;
+		const auto = this.autoData;
+		this.size = val;
+		this.autoData = auto;
+	}
+
+	setExternalMax(val: number): void {
+		if (val === this.externalMax) return;
+		const oldMax = this.maxSize;
+		this.externalMax = Math.max(-1, val);
+		if (!this.maxFix && !this.fixed && oldMax !== this.maxSize) {
+			this.emit(Events.EventChangeMax, this);
+		}
+		this.setRatio();
+		if (this.autoData) this.size = -1;
+		/* istanbul ignore else: no else */ else if (this.rat === 0) this.buildLines();
 	}
 
 	// #endregion public functions
