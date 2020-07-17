@@ -41,6 +41,8 @@ export class ColumnInfo extends EventEmitter {
 	// allow initialization by size component (do not make it -1)
 	private real = -2;
 
+	private prevSetSize = -1;
+
 	private prntName: string;
 
 	private ordr: number;
@@ -67,8 +69,8 @@ export class ColumnInfo extends EventEmitter {
 	}
 
 	get isFixed(): boolean {
-		if (this.fixed || (this.isPercent && this.table > -1)) return true;
-		return false;
+		if (this.fixed === false) return false;
+		return (this.isPercent && this.table > -1) || (this.fixed && !this.isPercent);
 	}
 
 	/** Return true if maxsize was set at startup */
@@ -139,7 +141,7 @@ export class ColumnInfo extends EventEmitter {
 	 * maxSize can only be set on initialization (maxSize option).
 	 */
 	get maxSize(): number {
-		if (this.fixed) return this.size;
+		if (this.isFixed) return this.size;
 		if (this.maxFix) {
 			if (this.setMaxSize === 0 || this.setMaxSize >= 1) return this.setMaxSize;
 			return this.setMaxSize * this.tableSize;
@@ -177,7 +179,7 @@ export class ColumnInfo extends EventEmitter {
 		const oldMax = this.maxSize;
 		this.dataMaxSize = Math.max(this.dataMaxSize, val);
 		if (oldDataMax === Math.max(this.dataMaxSize, this.externalMax, 0)) return;
-		if (!this.maxFix && !this.fixed && oldMax !== this.maxSize) {
+		if (!this.maxFix && !this.isFixed && oldMax !== this.maxSize) {
 			this.emit(Events.EventChangeMax, this);
 		}
 		this.setRatio();
@@ -193,7 +195,7 @@ export class ColumnInfo extends EventEmitter {
 		if (this.real >= 0) return this.real;
 		if (this.isPercent) {
 			if (this.tableSize >= 0) return this.setSize * this.tableSize;
-		} else if (this.fixed) return this.setSize;
+		} else if (this.isFixed) return this.setSize;
 
 		return Math.max(
 			this.setMinSize,
@@ -224,28 +226,33 @@ export class ColumnInfo extends EventEmitter {
 		//  - size can never be smaller than minimumsize (else it will be 0)
 		//  - size can never be bigger than maximumsize (else it will be maxsize)
 		let amnt = Math.floor(val);
-		const percent = this.isPercent;
-		if (this.setSize > 0 && this.fixed && val !== 0) {
+		const { isPercent, isFixed } = this;
+		if (this.setSize > 0 && isFixed && val !== 0) {
 			let testAmnt = -1;
-			if (percent && this.tableSize > -1) testAmnt = Math.ceil(this.setSize * this.tableSize);
-			else if (percent) testAmnt = val < 0 ? getStringSize(this.printName).size : val;
+			if (isPercent && isFixed) testAmnt = Math.ceil(this.setSize * this.tableSize);
+			else if (isPercent) testAmnt = val < 0 ? getStringSize(this.printName).size : val;
 			else testAmnt = this.setSize;
 			amnt = val < 0 ? testAmnt : testAmnt > val ? 0 : testAmnt;
 		}
-		const zero = this.real === 0 || amnt === 0 || this.autoData || percent;
-		if ((this.fixed && !zero) || amnt === this.real) return;
+		const zero = this.real === 0 || amnt === 0 || this.autoData || isPercent;
+		if ((isFixed && !zero) || amnt === this.real) {
+			if (val !== amnt) this.prevSetSize = val;
+			return;
+		}
 		const oldVal = this.real;
 		const dataMax = Math.max(this.dataMaxSize, this.externalMax, 0);
 		if (amnt < 0) {
-			if (this.setSize > -1 && !percent) this.real = this.setSize;
-			else if (percent && this.tableSize > -1) {
+			if (this.setSize > -1 && !isPercent) this.real = this.setSize;
+			else if (isPercent && this.tableSize > -1) {
 				this.real = Math.ceil(this.setSize * this.tableSize);
 			} else if (this.rat === 0) this.real = Math.max(0, this.setMinSize, this.maxSize);
 			else this.real = dataMax + this.headerMaxSize + this.space;
 			this.autoData = true;
+			this.prevSetSize = -1;
 		} else {
 			this.real = amnt;
-			this.autoData = percent && this.table < 0;
+			this.autoData = isPercent && this.table < 0;
+			this.prevSetSize = val !== amnt ? val : -1;
 		}
 
 		if (this.real < this.minSize) this.real = 0;
@@ -323,10 +330,27 @@ export class ColumnInfo extends EventEmitter {
 		this.table = v;
 		const max2 = this.maxSize;
 		if (this.maxFix && max !== max2) this.emit(Events.EventChangeMax, this);
+		const { isPercent, autoData, size, maxFix, prevSetSize: prev } = this;
+		if (!isPercent && !maxFix) return;
 		/* istanbul ignore next: ? -1 not hit */
-		if (!this.isPercent && !this.maxFix) return;
-		if (this.size > max2) this.size = this.isPercent ? -1 : max2;
-		else if (this.isPercent) this.size = -1; // reset size
+		/**
+		 * Size should change on the following occurences:
+		 * - if the max size is smaller than the actual size (size is always limited to max)
+		 * - autoData is set (i.e. flexible size value).  isPercentage = true
+		 * - If size is not set, but column is percentage and fixed and previous value was set
+		 *      i.e. we are using the tableSize x fraction on previous occasion
+		 * - If a previous set value (coult not initialize then as table size was too small) is active
+		 * - it is not a fixed column
+		 */
+		if (size > max2) this.size = isPercent ? -1 : max2;
+		// if isPercent = true, we don't have size that rely on tablesize
+		if (!isPercent) return;
+		if (!autoData && !(prev !== size && prev > -1) && this.real <= 0) return;
+		const table = Math.ceil(this.tableSize * this.setSize);
+		let setSize = table >= 0 ? table : -1;
+		if (prev > -1 && prev < table) setSize = 0;
+		if (autoData) setSize = -1;
+		this.size = setSize;
 	}
 
 	/** Get the header lines array. */
@@ -347,7 +371,7 @@ export class ColumnInfo extends EventEmitter {
 	readonly headAlign: Alignment;
 
 	/** Get a bollean that if true the sizes for the current column is fixed. */
-	fixed?: boolean;
+	private fixed?: boolean;
 	// #endregion public properties and variables
 
 	/**
@@ -378,13 +402,8 @@ export class ColumnInfo extends EventEmitter {
 		if (this.setMinSize > 0 && this.setMinSize !== this.setSize && options.fixed == null) {
 			this.fixed = false;
 		}
-		if (options.maxSize >= 0) {
-			this.setMaxSize = options.maxSize;
-			/* istanbul ignore else: no else */
-			if (options.fixed == null && options.maxSize !== this.setSize) {
-				this.fixed = false;
-			}
-		} else this.setMaxSize = -1;
+		if (options.maxSize >= 0) this.setMaxSize = options.maxSize;
+		else this.setMaxSize = -1;
 
 		// value related properties
 		this.pattern = options.pattern != null ? options.pattern : 'col-~D';
@@ -397,7 +416,7 @@ export class ColumnInfo extends EventEmitter {
 		this.ordr = options.order ? (options.order <= 0 ? 0 : options.order) : 0;
 
 		// initialize
-		if (this.setSize === -1 && this.fixed) {
+		if (this.setSize === -1 && this.isFixed) {
 			this.setSize = getStringSize(this.printName).size;
 		}
 		this.size = -1;
@@ -491,7 +510,7 @@ export class ColumnInfo extends EventEmitter {
 		if (val === this.externalMax && fixedSize === -1) return;
 		const oldMax = this.maxSize;
 		this.externalMax = Math.max(-1, val);
-		if (!this.maxFix && !this.fixed && oldMax !== this.maxSize) {
+		if (!this.maxFix && !this.isFixed && oldMax !== this.maxSize) {
 			this.emit(Events.EventChangeMax, this);
 		}
 		this.setRatio();
