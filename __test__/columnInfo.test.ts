@@ -196,7 +196,7 @@ describe('testing size property', () => {
 		expect(obj.size).toBe(3);
 		expect(obj.headerSize).toBe(3);
 		expect(obj.lines).toMatchObject(['col', '1  ']);
-		expect(obj.fixed).toBeTruthy();
+		expect(obj.isFixed).toBeTruthy();
 
 		// setting a size bigger than options.size will have no effect
 		obj.size = 5;
@@ -245,7 +245,7 @@ describe('testing size property', () => {
 
 		expect(obj.size).toBe(3);
 		expect(obj.lines).toMatchObject(['col', '1  ']);
-		expect(obj.fixed).toBeFalsy();
+		expect(obj.isFixed).toBeFalsy();
 
 		// setting size to any value > 0 will have an effect
 		obj.size = 5;
@@ -493,6 +493,51 @@ describe('testing size property', () => {
 		expect(obj.size).toBe(0);
 		expect(evnt.list).toMatchObject([]); // size is limited to table * size
 	});
+
+	test('internalSizeChange testing', () => {
+		const nme = new ColumnInfo({ name: 'col1' });
+
+		expect(nme.hasContent).toBeFalsy();
+		expect(nme.size).toBe(4);
+		expect(nme.maxContent).toBe(0);
+		expect(nme.contentSize).toBe(4);
+		nme.internalSizeChange(30);
+		expect(nme.hasContent).toBeFalsy();
+		expect(nme.size).toBe(30);
+		expect(nme.maxContent).toBe(0);
+		expect(nme.contentSize).toBe(4);
+
+		nme.size = 40;
+		nme.internalSizeChange(-1);
+		expect(nme.size).toBe(40);
+	});
+
+	test('setExtenalMaxSize testing', () => {
+		const nme = new ColumnInfo({ name: 'col1' });
+
+		expect(nme.hasContent).toBeFalsy();
+		nme.maxContent = 20;
+		expect(nme.hasContent).toBeTruthy();
+		expect(nme.size).toBe(20);
+		expect(nme.maxContent).toBe(20);
+		expect(nme.contentSize).toBe(20);
+		nme.setExternalMax(30);
+		expect(nme.size).toBe(30);
+		expect(nme.maxContent).toBe(30);
+		expect(nme.contentSize).toBe(20);
+
+		nme.setExternalMax(15);
+		expect(nme.size).toBe(20);
+		expect(nme.maxContent).toBe(20);
+		expect(nme.contentSize).toBe(20);
+		nme.size = 40;
+		expect(nme.size).toBe(40);
+		nme.size = 22;
+		expect(nme.lines).toMatchObject(['col1                  ']);
+		nme.setExternalMax(23);
+		expect(nme.size).toBe(22);
+		expect(nme.lines).toMatchObject(['col1                  ']);
+	});
 });
 
 describe('testing max- && minSize property', () => {
@@ -697,6 +742,22 @@ describe('testing ratio property', () => {
 		evnt.reset();
 		obj.tableSize = 18;
 		expect(evnt.list).toMatchObject([]);
+		obj.ratio = 0;
+		expect(obj.tableSize).toBe(18);
+		expect(obj.isFixed).toBeTruthy();
+		expect(obj.isPercent).toBeTruthy();
+		obj.size = 30;
+		expect(obj.size).toBe(8);
+		obj.tableSize = 78;
+		// 30 is below 32
+		expect(obj.size).toBe(0);
+		obj.size = 35;
+		expect(obj.size).toBe(32);
+		obj.tableSize = -1;
+		expect(obj.tableSize).toBe(-1);
+		expect(obj.isFixed).toBeFalsy();
+		expect(obj.isPercent).toBeTruthy();
+		expect(obj.size).toBe(35);
 	});
 
 	test('size set as fraction', () => {
