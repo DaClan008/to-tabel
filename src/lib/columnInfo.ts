@@ -516,7 +516,6 @@ export class ColumnInfo extends EventEmitter {
 		this.setRatio();
 		if (fixedSize > -1) this.internalSizeChange(fixedSize, true);
 		else if (this.autoData) this.size = -1;
-		/* istanbul ignore else: no else */ else if (this.rat === 0) this.buildLines();
 	}
 
 	// #endregion public functions
