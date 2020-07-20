@@ -230,7 +230,6 @@ export class ColumnInfo extends EventEmitter {
 		if (this.setSize > 0 && isFixed && val !== 0) {
 			let testAmnt = -1;
 			if (isPercent && isFixed) testAmnt = Math.ceil(this.setSize * this.tableSize);
-			else if (isPercent) testAmnt = val < 0 ? getStringSize(this.printName).size : val;
 			else testAmnt = this.setSize;
 			amnt = val < 0 ? testAmnt : testAmnt > val ? 0 : testAmnt;
 		}
