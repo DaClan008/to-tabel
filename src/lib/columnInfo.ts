@@ -326,6 +326,7 @@ export class ColumnInfo extends EventEmitter {
 		const v = Math.max(val, -1);
 		if (v === this.table) return;
 		const max = this.maxSize;
+		const old = this.table;
 		this.table = v;
 		const max2 = this.maxSize;
 		if (this.maxFix && max !== max2) this.emit(Events.EventChangeMax, this);
@@ -344,11 +345,11 @@ export class ColumnInfo extends EventEmitter {
 		if (size > max2) this.size = isPercent ? -1 : max2;
 		// if isPercent = true, we don't have size that rely on tablesize
 		if (!isPercent) return;
-		if (!autoData && !(prev !== size && prev > -1) && this.real <= 0) return;
 		const table = Math.ceil(this.tableSize * this.setSize);
-		let setSize = table >= 0 ? table : -1;
-		if (prev > -1 && prev < table) setSize = 0;
-		if (autoData) setSize = -1;
+		let setSize = this.tableSize < 0 || autoData ? -1 : table;
+		if (prev > -1 && old > -1) {
+			setSize = this.tableSize > -1 ? (prev >= table ? table : 0) : prev;
+		}
 		this.size = setSize;
 	}
 
