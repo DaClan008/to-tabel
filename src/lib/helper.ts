@@ -285,7 +285,8 @@ export function getStringLines(valStr: string, size = -1, eLevel = emojiLevel.al
  * @returns {string[]}
  */
 export function fillLine(data: string[], colSize: IColumnSize, header = false): string[] {
-	if (!data || data.length === 0 || colSize == null) return [];
+	if (!data || data.length === 0) return [];
+	if (colSize == null) return data;
 	const result: string[] = [];
 	const workSize = colSize.ratio
 		? header
@@ -318,7 +319,7 @@ export function fillLine(data: string[], colSize: IColumnSize, header = false): 
 			}
 		} else {
 			size = getStringSize(line.slice(0, -1), colSize.tabSize, colSize.eLevel);
-			while (size.size < workSize) {
+			while (size.size > 0 && size.size > workSize) {
 				size = getStringSize(size.val.slice(0, -1), colSize.tabSize, colSize.eLevel);
 			}
 			current = size.val;
