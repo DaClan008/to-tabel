@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import * as Events from './events';
 import { ColumnInfo } from './columnInfo';
 import { Alignment, emojiLevel } from '../types/options';
-import { fillSpace, getStringSize } from './helper';
+import { fillSpace } from './helper';
 import { IColumnSize } from './interfaces';
 
 export class CombinedInfo extends EventEmitter implements IColumnSize {
@@ -166,8 +166,13 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 		if (sze <= 0) {
 			const fixedNme = this.nmeCol && this.nmeCol.isFixed;
 			const fixedNum = this.numCol && this.numCol.isFixed;
-			if (fixedNme) sze = this.nmeCol.size > sze ? 0 : this.nmeCol.size;
-			else if (fixedNum) sze = this.nmeCol.size > sze ? 0 : this.numCol.size;
+			if (fixedNme) {
+				if (sze === -1) this.nmeCol.size = -1;
+				sze = this.nmeCol.size > sze && sze > -1 ? 0 : this.nmeCol.size;
+			} else if (fixedNum) {
+				if (sze === -1) this.numCol.size = -1;
+				sze = this.nmeCol.size > sze && sze > -1 ? 0 : this.numCol.maxSize;
+			}
 		}
 		if (this.nmeCol != null) this.nmeCol.size = sze;
 		if (this.numCol != null) this.numCol.size = sze;
@@ -247,7 +252,8 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	constructor(nmeInfo: ColumnInfo, numInfo?: ColumnInfo) {
 		super();
 		if (nmeInfo == null && numInfo == null) return;
-		this.compare(nmeInfo, numInfo);
+		this.addInfo(nmeInfo, numInfo);
+		if (this.nmeCol && this.numCol && this.numCol.isFixed) this.size = -1;
 	}
 
 	// #region Event Handlers -------------------------------------------------
