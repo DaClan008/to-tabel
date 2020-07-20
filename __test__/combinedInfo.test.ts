@@ -97,12 +97,24 @@ describe('CombinedInfo init', () => {
 		expect(new CombinedInfo(num, num).proper).toBeTruthy();
 	});
 	test('seeting objects with different tableSizes', () => {
-		const nme = new ColumnInfo({ name: 'col1', tableSize: 10 });
-		const num = new ColumnInfo({ name: '1', tableSize: 20 });
+		const getNme = () => new ColumnInfo({ name: 'col1', tableSize: 10 });
+		const getNum = () => new ColumnInfo({ name: '1', tableSize: 20 });
 
-		expect(new CombinedInfo(nme, num).proper).toBeTruthy();
-		expect(new CombinedInfo(null, num).proper).toBeTruthy();
-		expect(new CombinedInfo(nme, null).proper).toBeTruthy();
+		let obj = new CombinedInfo(getNme(), getNum());
+		expect(obj.proper).toBeTruthy();
+		expect(obj.tableSize).toBe(20);
+
+		obj = new CombinedInfo(null, getNum());
+		expect(obj.proper).toBeTruthy();
+		expect(obj.tableSize).toBe(20);
+
+		obj = new CombinedInfo(getNme(), null);
+		expect(obj.proper).toBeTruthy();
+		expect(obj.tableSize).toBe(10);
+
+		obj = new CombinedInfo(getNum(), getNme());
+		expect(obj.proper).toBeTruthy();
+		expect(obj.tableSize).toBe(20);
 	});
 });
 
@@ -269,6 +281,34 @@ describe('Size Property inside CombinedInfo', () => {
 		obj.size = 0;
 		expect(obj.size).toBe(0);
 		expect(obj.lines).toMatchObject([]);
+
+		obj = new CombinedInfo(
+			new ColumnInfo({ name: 'col1', size: 10 }),
+			new ColumnInfo({ name: '1' }),
+		);
+		expect(obj.size).toBe(10);
+		obj.size = 15;
+		expect(obj.size).toBe(10);
+		obj.size = 0;
+		expect(obj.size).toBe(0);
+		obj.size = -1;
+		expect(obj.size).toBe(10);
+		obj.size = 5;
+		expect(obj.size).toBe(0);
+
+		obj = new CombinedInfo(
+			new ColumnInfo({ name: 'col1' }),
+			new ColumnInfo({ name: '1', size: 10 }),
+		);
+		expect(obj.size).toBe(10);
+		obj.size = 15;
+		expect(obj.size).toBe(10);
+		obj.size = 0;
+		expect(obj.size).toBe(0);
+		obj.size = -1;
+		expect(obj.size).toBe(10);
+		obj.size = 5;
+		expect(obj.size).toBe(0);
 	});
 
 	test('odd size values', () => {
@@ -277,6 +317,9 @@ describe('Size Property inside CombinedInfo', () => {
 		const obj = new CombinedInfo(nme, null);
 		nme.tableSize = 10;
 		obj.size = -1;
+		expect(obj.size).toBe(10);
+
+		obj.size = 5;
 		expect(obj.size).toBe(0);
 	});
 });
