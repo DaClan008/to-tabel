@@ -4,9 +4,11 @@ import {
 	getCleanSize,
 	getStringSize,
 	getStringLines,
+	fillLine,
 	isNum,
 } from '../src/lib/helper';
-import { emojiLevel } from '../src/types/options';
+import { emojiLevel, Alignment } from '../src/types/options';
+import { IColumnSize } from '../src/lib/interfaces';
 
 describe('testing isNum function', () => {
 	test('must return true if text is a number', () => {
@@ -380,5 +382,73 @@ describe('testing string lines', () => {
 			'ting',
 			'str',
 		]);
+	});
+});
+
+describe('testing fillLine function, Ratio 0', () => {
+	test('call function with null params', () => {
+		const col: IColumnSize = {
+			size: 5,
+			align: Alignment.center,
+			headAlign: Alignment.right,
+			headerSize: 10,
+			ratio: 0,
+			contentSize: 10,
+			tabSize: 2,
+			eLevel: emojiLevel.med,
+		};
+		expect(fillLine(null, null)).toMatchObject([]);
+		expect(fillLine(null, col)).toMatchObject([]);
+		expect(fillLine([], col)).toMatchObject([]);
+		expect(fillLine(['some data'], null)).toMatchObject(['some data']);
+	});
+
+	test('with ratio set to 0', () => {
+		const col: IColumnSize = {
+			size: 5,
+			align: Alignment.center,
+			headAlign: Alignment.right,
+			headerSize: 10,
+			ratio: 0,
+			contentSize: 10,
+			tabSize: 2,
+			eLevel: emojiLevel.med,
+		};
+		const data = ['col', '1'];
+		let result = fillLine(data, col);
+
+		expect(result).toMatchObject([' col ', '  1  ']);
+
+		result = fillLine(data, col, true);
+
+		expect(result).toMatchObject(['  col', '    1']);
+		result = fillLine(['this is super long'], col, true);
+
+		expect(result).toMatchObject(['this ']);
+	});
+
+	test('with ratio set to 0.4', () => {
+		const col: IColumnSize = {
+			size: 29,
+			align: Alignment.center,
+			headAlign: Alignment.right,
+			headerSize: 10,
+			ratio: 0.4,
+			contentSize: 15,
+			tabSize: 2,
+			eLevel: emojiLevel.med,
+		};
+		const data = ['col', '1'];
+		let result = fillLine(data, col);
+
+		expect(result).toMatchObject(['      col      ', '       1       ']);
+
+		result = fillLine(data, col, true);
+
+		expect(result).toMatchObject(['       col', '         1']);
+
+		result = fillLine(['this is super long'], col, true);
+
+		expect(result).toMatchObject(['this is su']);
 	});
 });
