@@ -16,6 +16,8 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 
 	private hSze = 0;
 
+	private cSze = 0;
+
 	private lnes: string[] = [];
 
 	private ordr = 0;
@@ -36,8 +38,10 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	}
 
 	/** Returns the percentage in terms of table size vs column size */
-	get percentage(): boolean {
-		return this.nmeCol.isPercent || this.numCol.isPercent;
+	get isPercent(): boolean {
+		const nme = this.nmeCol ? this.nmeCol.isPercent : false;
+		const num = this.numCol ? this.numCol.isPercent : false;
+		return nme || num;
 	}
 
 	get tabSize(): number {
@@ -178,6 +182,14 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 		if (this.numCol != null) this.numCol.size = sze;
 	}
 
+	get spaceSize(): number {
+		return this.nmeCol == null
+			? this.numCol == null
+				? 0
+				: this.numCol.spaceSize
+			: this.nmeCol.spaceSize;
+	}
+
 	/** Get the size of the header column. */
 	get headerSize(): number {
 		return this.nmeCol == null
@@ -289,9 +301,10 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	// todo: the hSze did not corectly update when num content is larger.
 	/** Monitor changes to the ratio being set. */
 	private ratioEventListener = (col: ColumnInfo): void => {
-		if (this.hSze === this.headerSize) return;
+		if (this.hSze === this.headerSize && this.cSze === this.contentSize) return;
 		// if (col.name === this.name2 && this.nmeCol) return;
 		this.hSze = this.headerSize;
+		this.cSze = this.contentSize;
 		this.changeEmpties();
 		this.emit(Events.EventChangeRatio, this);
 	};

@@ -226,11 +226,11 @@ export class ColumnInfo extends EventEmitter {
 		//  - size can never be smaller than minimumsize (else it will be 0)
 		//  - size can never be bigger than maximumsize (else it will be maxsize)
 		let amnt = Math.floor(val);
-		const { isPercent, isFixed } = this;
-		if (this.setSize > 0 && isFixed && val !== 0) {
+		const { isPercent, isFixed, setSize, tableSize } = this;
+		if (setSize > 0 && isFixed && val !== 0) {
 			let testAmnt = -1;
-			if (isPercent && isFixed) testAmnt = Math.ceil(this.setSize * this.tableSize);
-			else testAmnt = this.setSize;
+			if (isPercent && isFixed) testAmnt = Math.ceil(setSize * tableSize);
+			else testAmnt = setSize;
 			amnt = val < 0 ? testAmnt : testAmnt > val ? 0 : testAmnt;
 		}
 		const zero = this.real === 0 || amnt === 0 || this.autoData || isPercent;
@@ -245,7 +245,8 @@ export class ColumnInfo extends EventEmitter {
 			else if (isPercent && this.tableSize > -1) {
 				this.real = Math.ceil(this.setSize * this.tableSize);
 			} else if (this.rat === 0) this.real = Math.max(0, this.setMinSize, this.maxSize);
-			else this.real = dataMax + this.headerMaxSize + this.space;
+			else if (this.rat === 1) this.real = dataMax + this.headerMaxSize + this.space;
+			else this.real = Math.floor(this.headerMaxSize / this.ratio) + this.space;
 			this.autoData = true;
 			this.prevSetSize = -1;
 		} else {
@@ -262,38 +263,51 @@ export class ColumnInfo extends EventEmitter {
 		this.emit(Events.EventChangeSize, this);
 	}
 
+	get spaceSize(): number {
+		if (this.ratio > 0) return this.size - this.space;
+		return this.size;
+	}
+
 	/**	Get the size of the header Column */
 	get headerSize(): number {
-		const { size, ratio } = this;
-		if (size === 0 && !this.autoData) return 0;
+		const {
+			size,
+			ratio,
+			autoData,
+			isFixed,
+			maxHeader,
+			space,
+			headerMaxSize,
+			dataMaxSize,
+			externalMax,
+		} = this;
+		if (size === 0 && !autoData) return 0;
 		if (ratio > 0) {
-			if (this.rat === 1 && this.autoData && !this.isFixed) {
-				return this.maxHeader;
-			}
-			if (size - this.space < 1) return 0;
-			return Math.round((size - this.space) * ratio);
+			if (autoData && !isFixed) return maxHeader;
+			if (size - space < 1) return 0;
+			return Math.round((size - space) * ratio);
 		}
-		if ((size === -1 || this.autoData) && !this.isFixed) {
-			return Math.max(this.headerMaxSize, this.dataMaxSize, this.externalMax);
+		if ((size === -1 || autoData) && !isFixed) {
+			return Math.max(headerMaxSize, dataMaxSize, externalMax);
 		}
 		return size;
 	}
 
 	/** Get the size of the content column. */
 	get contentSize(): number {
-		const { size, ratio, headerSize } = this;
-		if (size === 0 && !this.autoData) return 0;
+		const { size, ratio, rat, headerSize, autoData, isFixed, space, headerMaxSize } = this;
+		const dataMax = Math.max(0, this.dataMaxSize, this.externalMax);
+		if (size === 0 && !autoData) return 0;
 		if (ratio) {
 			if (headerSize === 0) return 0;
-			if (this.rat === 1 && this.autoData && !this.isFixed) {
-				const dataMax = Math.max(0, this.dataMaxSize, this.externalMax);
+			if (rat === 1 && autoData && !isFixed) {
 				return dataMax === 0 && headerSize > 0
 					? Math.ceil(headerSize / ratio - headerSize)
 					: dataMax;
 			}
-			return size - headerSize - this.space;
+			return size - headerSize - space;
 		}
-		if (this.autoData) return Math.max(this.headerMaxSize, this.dataMaxSize);
+		if (autoData) return Math.max(headerMaxSize, dataMax);
 		return size;
 	}
 
@@ -309,12 +323,17 @@ export class ColumnInfo extends EventEmitter {
 
 	set ratio(val: number) {
 		if (val === this.rat || val < 0 || val > 1) return;
-		const old = this.headerSize;
+		const { headerSize, contentSize } = this;
 		this.rat = val;
-		if (this.headerSize !== old) this.emit(Events.EventChangeRatio, this);
+		const content =
+			val > 0 && val < 1
+				? Math.floor(this.headerSize / val) - this.headerSize
+				: this.contentSize;
+		const changed = this.headerSize !== headerSize || content !== contentSize;
+		if (changed) this.emit(Events.EventChangeRatio, this);
 
 		if (this.autoData) this.size = -1;
-		if (this.headerSize !== old) this.buildLines();
+		if (changed) this.buildLines();
 	}
 
 	/** The size of the table in which collumn will appear (excluding borders & Padding) */
