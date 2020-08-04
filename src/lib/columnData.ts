@@ -15,19 +15,24 @@ export class ColumnData extends BaseData {
 		tabSpace: number,
 		row: number,
 		private readonly eLevel = emojiLevel.all,
+		maxSize?: number,
 	) {
-		super(key, row);
+		super(key, row, maxSize);
 		const size = getStringSize(val || '', tabSpace, eLevel);
 		this.val = size.val;
 		this.max = size.size;
 		this.lines = getStringLines(this.val, -1, this.eLevel);
 	}
 
-	buildLines(): boolean {
-		/* istanbul ignore else: no else */
+	sizeChanged(): boolean {
 		if (this.size === this.prevSize) return false;
-		let changed = false;
 		this.prevSize = this.size;
+		return true;
+	}
+
+	buildLines(force = false): boolean {
+		/* istanbul ignore else: no else */
+		let changed = false;
 
 		/* istanbul ignore else: no else */
 		if (this.size <= 0 || !this.val) {
