@@ -54,6 +54,8 @@ export class ColumnInfo extends EventEmitter {
 
 	private externalMax = -1;
 
+	private externalHead = -1;
+
 	/** the actual maximum size of the header of the column (excluding padding) */
 	private headerMaxSize = 0;
 
@@ -63,7 +65,9 @@ export class ColumnInfo extends EventEmitter {
 	private rat = 0;
 
 	private intRat = 0;
+	//	#endregion private properties and variables ---------------------------
 
+	// #region public properties and variables --------------------------------
 	get hasContent(): boolean {
 		return this.dataMaxSize > -1;
 	}
@@ -79,9 +83,7 @@ export class ColumnInfo extends EventEmitter {
 		if (this.setMaxSize < 1 && this.table < 0) return false;
 		return true;
 	}
-	//	#endregion private properties and variables ---------------------------
 
-	// #region public properties and variables --------------------------------
 	/**
 	 * Get the percentage value of the size of this collumn inside a table size.
 	 * Set on initialization (options).
@@ -162,7 +164,7 @@ export class ColumnInfo extends EventEmitter {
 	 * Get the actual maximum size of the header (data) (excluding padding)
 	 */
 	get maxHeader(): number {
-		return this.headerMaxSize;
+		return this.rat > 0 ? Math.max(this.headerMaxSize, this.externalHead) : this.headerMaxSize;
 	}
 
 	/**
@@ -226,26 +228,24 @@ export class ColumnInfo extends EventEmitter {
 		//  - size can never be smaller than minimumsize (else it will be 0)
 		//  - size can never be bigger than maximumsize (else it will be maxsize)
 		let amnt = Math.floor(val);
-		const { isPercent, isFixed, setSize, tableSize } = this;
+		const { isPercent, isFixed, setSize, tableSize, real, autoData } = this;
 		if (setSize > 0 && isFixed && val !== 0) {
 			let testAmnt = -1;
 			if (isPercent && isFixed) testAmnt = Math.ceil(setSize * tableSize);
 			else testAmnt = setSize;
 			amnt = val < 0 ? testAmnt : testAmnt > val ? 0 : testAmnt;
 		}
-		const zero = this.real === 0 || amnt === 0 || this.autoData || isPercent;
+		const zero = real === 0 || amnt === 0 || autoData || isPercent;
 		if ((isFixed && !zero) || amnt === this.real) {
 			if (val !== amnt) this.prevSetSize = val;
 			return;
 		}
 		const oldVal = this.real;
-		const dataMax = Math.max(this.dataMaxSize, this.externalMax, 0);
 		if (amnt < 0) {
 			if (this.setSize > -1 && !isPercent) this.real = this.setSize;
 			else if (isPercent && this.tableSize > -1) {
 				this.real = Math.ceil(this.setSize * this.tableSize);
 			} else if (this.rat === 0) this.real = Math.max(0, this.setMinSize, this.maxSize);
-			else if (this.rat === 1) this.real = dataMax + this.headerMaxSize + this.space;
 			else this.real = Math.floor(this.headerMaxSize / this.ratio) + this.space;
 			this.autoData = true;
 			this.prevSetSize = -1;
@@ -291,6 +291,10 @@ export class ColumnInfo extends EventEmitter {
 			return Math.max(headerMaxSize, dataMaxSize, externalMax);
 		}
 		return size;
+	}
+
+	set headerExternal(val: number) {
+		this.externalHead = val < 0 ? 0 : val;
 	}
 
 	/** Get the size of the content column. */
@@ -446,18 +450,15 @@ export class ColumnInfo extends EventEmitter {
 	 * Method to ensure that the ratios correctly reflect the data (if auto)
 	 */
 	private setRatio(): void {
-		const rat = this.ratio;
-		const header = this.headerSize;
+		const { ratio: rat, headerSize: header, headerMaxSize } = this;
 		const dataMax = Math.max(this.dataMaxSize, this.externalMax, -1);
 		if (dataMax <= 0) this.intRat = 0.5;
 		else {
-			this.intRat = this.headerMaxSize / (this.headerMaxSize + dataMax);
-			this.intRat = Math.min(0.8, Math.max(0.2, this.intRat));
+			this.intRat = headerMaxSize / (headerMaxSize + dataMax);
+			this.intRat = Math.min(0.85, Math.max(0.15, this.intRat));
 		}
 		// notify
-		if (rat !== this.ratio) {
-			this.emit(Events.EventChangeRatio, this);
-		}
+		if (rat !== this.ratio) this.emit(Events.EventChangeRatio, this);
 		if (header !== this.headerSize) this.buildLines();
 	}
 
@@ -491,11 +492,18 @@ export class ColumnInfo extends EventEmitter {
 
 	// #region public functions -----------------------------------------------
 	/**
-	 * Reset the data max size for the column.
+	 * Reset the external data max size for the column.
 	 */
 	reset(): void {
-		this.dataMaxSize = -1;
 		this.externalMax = -1;
+		this.setRatio();
+	}
+
+	/**
+	 * Resets the internal maxContent value.
+	 */
+	resetContent(): void {
+		this.dataMaxSize = 0;
 		this.setRatio();
 	}
 
@@ -520,21 +528,21 @@ export class ColumnInfo extends EventEmitter {
 
 	internalSizeChange(val: number, fixed = false): void {
 		if (!this.autoData && val === -1) return;
-		const auto = this.autoData;
+		const { autoData } = this;
 		this.size = val;
-		this.autoData = !fixed ? auto : false;
+		this.autoData = !fixed ? autoData : false;
 	}
 
 	setExternalMax(val: number, fixedSize = -1): void {
 		if (val === this.externalMax && fixedSize === -1) return;
-		const oldMax = this.maxSize;
+		const { maxSize: oldMax, maxFix, isFixed, autoData } = this;
 		this.externalMax = Math.max(-1, val);
-		if (!this.maxFix && !this.isFixed && oldMax !== this.maxSize) {
-			this.emit(Events.EventChangeMax, this);
-		}
+		// raise event
+		if (!maxFix && !isFixed && oldMax !== this.maxSize) this.emit(Events.EventChangeMax, this);
+		// set internal ratio
 		this.setRatio();
 		if (fixedSize > -1) this.internalSizeChange(fixedSize, true);
-		else if (this.autoData) this.size = -1;
+		else if (autoData) this.size = -1;
 	}
 
 	// #endregion public functions
