@@ -109,6 +109,10 @@ export type Options = {
 	 * Default is false if columns options is used, else true.
 	 */
 	canGrow?: boolean;
+	/**
+	 * If true, will automatcially print the object after initialization.
+	 */
+	print?: boolean;
 };
 
 export type borderOptionTypes = boksOptions | combinedBorders | BorderTypes;
