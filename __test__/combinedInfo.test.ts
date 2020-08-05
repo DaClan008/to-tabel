@@ -97,12 +97,21 @@ describe('CombinedInfo init', () => {
 		expect(new CombinedInfo(num, num).proper).toBeTruthy();
 	});
 	test('seeting objects with different tableSizes', () => {
-		const getNme = () => new ColumnInfo({ name: 'col1', tableSize: 10 });
-		const getNum = () => new ColumnInfo({ name: '1', tableSize: 20 });
+		const getNme = () =>
+			new ColumnInfo({
+				name: 'col1',
+				tableSize: 10,
+			});
+		const getNum = () =>
+			new ColumnInfo({
+				name: '1',
+				tableSize: 20,
+			});
 
 		let obj = new CombinedInfo(getNme(), getNum());
 		expect(obj.proper).toBeTruthy();
-		expect(obj.tableSize).toBe(20);
+		// alwasy take name value if both is supplied.
+		expect(obj.tableSize).toBe(10);
 
 		obj = new CombinedInfo(null, getNum());
 		expect(obj.proper).toBeTruthy();
@@ -112,6 +121,7 @@ describe('CombinedInfo init', () => {
 		expect(obj.proper).toBeTruthy();
 		expect(obj.tableSize).toBe(10);
 
+		// alwasy take name value if both is supplied.
 		obj = new CombinedInfo(getNum(), getNme());
 		expect(obj.proper).toBeTruthy();
 		expect(obj.tableSize).toBe(20);
@@ -126,7 +136,7 @@ describe('Size Property inside CombinedInfo', () => {
 		obj.tableSize = 20;
 		expect(obj.name2).toBe('');
 		expect(obj.proper).toBeTruthy();
-		expect(obj.percentage).toBeTruthy();
+		expect(obj.isPercent).toBeTruthy();
 		expect(obj.size).toBe(4);
 
 		const num = new ColumnInfo({ name: '1', size: 0.2 });
@@ -134,7 +144,7 @@ describe('Size Property inside CombinedInfo', () => {
 		obj = new CombinedInfo(nme, num);
 		expect(obj.name).toBe('co1');
 		expect(obj.name2).toBe('1');
-		expect(obj.percentage).toBeTruthy();
+		expect(obj.isPercent).toBeTruthy();
 		expect(obj.size).toBe(3);
 		obj.tableSize = 20;
 		expect(obj.size).toBe(4);
@@ -352,7 +362,7 @@ describe('Ratio property insize CombinedInfo', () => {
 		expect(obj.emptyHeader).toBe('    ');
 		expect(nmeEvnt.list).toMatchObject(['ratio', 'lines', 'size']);
 		// headersize does not change from 5... therefore no ratio change... only size changed.
-		expect(numEvnt.list).toMatchObject(['size']);
+		expect(numEvnt.list).toMatchObject(['ratio', 'size']);
 		expect(nme.ratio).toBe(0.2);
 		expect(num.ratio).toBe(5 / 7);
 
@@ -376,7 +386,7 @@ describe('Ratio property insize CombinedInfo', () => {
 		nmeEvnt.reset();
 
 		// should reset content size
-		obj.reset();
+		obj.resetContent();
 		expect(obj.size).toBe(14);
 		expect(obj.ratio).toBe(0.5);
 		expect(obj.headerSize).toBe(5);
@@ -465,7 +475,7 @@ describe('Ratio property insize CombinedInfo', () => {
 		nmeEvnt.reset();
 
 		// should reset content size
-		obj.reset();
+		obj.resetContent();
 		expect(obj.size).toBe(14);
 		expect(obj.ratio).toBe(0.5);
 		expect(obj.headerSize).toBe(5);
@@ -519,7 +529,7 @@ describe('Ratio property insize CombinedInfo', () => {
 		expect(obj.emptyContent).toBe('  ');
 		expect(obj.emptyHeader).toBe('     ');
 		// only size changed
-		expect(numEvnt.list).toMatchObject(['size']);
+		expect(numEvnt.list).toMatchObject(['ratio', 'size']);
 		numEvnt.reset();
 
 		obj.size = 14;
@@ -536,7 +546,7 @@ describe('Ratio property insize CombinedInfo', () => {
 		numEvnt.reset();
 
 		// should reset content size
-		obj.reset();
+		obj.resetContent();
 		expect(obj.size).toBe(14);
 		expect(obj.ratio).toBe(0.5);
 		expect(obj.headerSize).toBe(5);
@@ -588,20 +598,22 @@ describe('odd property & Events tests inside CombinedInfo', () => {
 		objEvnt.reset();
 
 		obj.ratio = 1;
-		expect(objEvnt.list).toMatchObject(['lines', 'size']);
+		expect(objEvnt.list).toMatchObject(['ratio', 'lines', 'size']);
 		expect(nmeEvnt.list).toMatchObject(['ratio', 'lines', 'size']);
 		expect(numEvnt.list).toMatchObject(['ratio', 'lines', 'size']);
 
 		expect(obj.size).toBe(28);
+		expect(obj.ratio).toBe(4 / 24);
 		expect(obj.headerSize).toBe(4);
 		expect(obj.contentSize).toBe(20);
 
 		numEvnt.reset();
 		nmeEvnt.reset();
 		objEvnt.reset();
+		expect(num.ratio).toBe(0.2);
 
 		num.ratio = 0.3;
-		expect(numEvnt.list).toMatchObject(['ratio', 'lines']);
+		expect(numEvnt.list).toMatchObject(['ratio', 'size']);
 		expect(nmeEvnt.list).toMatchObject([]);
 		expect(objEvnt.list).toMatchObject([]);
 
@@ -659,7 +671,7 @@ describe('odd property & Events tests inside CombinedInfo', () => {
 		const nme2Evnt = new EventReg(nme2);
 
 		obj.compare(nme2, num2);
-		expect(objEvnt.list).toMatchObject(['max', 'ratio', 'lines', 'order', 'lines']);
+		expect(objEvnt.list).toMatchObject(['max', 'lines', 'lines', 'order']);
 		expect(nmeEvnt.list).toMatchObject([]);
 		expect(nme2Evnt.list).toMatchObject(['lines', 'size']);
 		expect(num2Evnt.list).toMatchObject(['lines', 'size']);
@@ -670,10 +682,11 @@ describe('odd property & Events tests inside CombinedInfo', () => {
 
 		num2.order = 1;
 		// theres still a bigger order number
-		expect(objEvnt.list).toMatchObject([]);
+		expect(objEvnt.list).toMatchObject(['order']);
+		objEvnt.reset();
 		nme2.order = 0;
 		expect(objEvnt.list).toMatchObject(['order']);
-		expect(obj.order).toBe(1);
+		expect(obj.order).toBe(0);
 	});
 
 	test('align properties', () => {

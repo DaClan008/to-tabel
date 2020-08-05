@@ -524,7 +524,7 @@ describe('testing size property', () => {
 		nme.setExternalMax(30);
 		expect(nme.size).toBe(30);
 		expect(nme.maxContent).toBe(30);
-		expect(nme.contentSize).toBe(20);
+		expect(nme.contentSize).toBe(30);
 
 		nme.setExternalMax(15);
 		expect(nme.size).toBe(20);
@@ -532,10 +532,16 @@ describe('testing size property', () => {
 		expect(nme.contentSize).toBe(20);
 		nme.size = 40;
 		expect(nme.size).toBe(40);
+		expect(nme.maxContent).toBe(20);
+		expect(nme.contentSize).toBe(40);
 		nme.size = 22;
 		expect(nme.lines).toMatchObject(['col1                  ']);
+		expect(nme.maxContent).toBe(20);
+		expect(nme.contentSize).toBe(22);
 		nme.setExternalMax(23);
 		expect(nme.size).toBe(22);
+		expect(nme.maxContent).toBe(23);
+		expect(nme.contentSize).toBe(22);
 		expect(nme.lines).toMatchObject(['col1                  ']);
 	});
 });
@@ -584,7 +590,7 @@ describe('testing max- && minSize property', () => {
 		expect(obj.maxContent).toBe(10);
 
 		// first reset the maxContent variables
-		obj.reset();
+		obj.resetContent();
 		expect(obj.maxContent).toBe(0);
 
 		// then change maxcontent to lower amount.
@@ -698,7 +704,7 @@ describe('testing ratio property', () => {
 		obj.ratio = 1;
 		expect(obj.ratio).toBe(4 / 7);
 		// no change has occured except for size chagne
-		expect(evnt.list).toMatchObject(['size']);
+		expect(evnt.list).toMatchObject(['ratio', 'size']);
 		evnt.reset();
 		obj.maxContent = 7;
 		expect(obj.ratio).toBe(4 / 11);
