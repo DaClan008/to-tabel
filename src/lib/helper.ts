@@ -40,7 +40,7 @@ export function getCleanSize(val: string, eLevel = emojiLevel.all): number {
 		}
 	}
 	// eslint-disable-next-line no-control-regex
-	const Ascii = v.replace(/[\x00-\x7f]/g, '|');
+	const Ascii = v.replace(/[\x00-\x7f]/g, ' ');
 	// eslint-disable-next-line no-control-regex
 	const nonAscii = v.replace(/[^\x00-\x7f]/g, '');
 
@@ -49,7 +49,7 @@ export function getCleanSize(val: string, eLevel = emojiLevel.all): number {
 
 	const asciiCalc = (tot: number, str: string): number => {
 		if (!str) {
-			return 0;
+			return tot;
 		}
 		let cnt = 0;
 
@@ -75,7 +75,7 @@ export function getCleanSize(val: string, eLevel = emojiLevel.all): number {
 		}
 		return tot + cnt;
 	};
-	len += Ascii.split('|').reduce(asciiCalc, 0);
+	len += Ascii.split(' ').reduce(asciiCalc, 0);
 
 	return len + nonAscii.length;
 }
