@@ -1,7 +1,6 @@
 import { Options as boksOptions } from 'boks';
 
 export { boksOptions };
-
 export enum emojiLevel {
 	none = 0,
 	all = 1,
@@ -113,6 +112,19 @@ export type Options = {
 	 * If true, will automatcially print the object after initialization.
 	 */
 	print?: boolean;
+	/**
+	 * If true, all rows including empty rows will be printed,
+	 * else only rows with data will be printed.
+	 * @default false
+	 */
+	inclusive?: boolean;
+
+	/**
+	 * If true, fills the table to its max or set size.
+	 * else table will only be filled to wrap the actual data size.
+	 * @default false
+	 */
+	fill?: boolean;
 };
 
 export type borderOptionTypes = boksOptions | combinedBorders | BorderTypes;
@@ -130,6 +142,7 @@ export type intOptions = {
 export type combinedBorders = {
 	content: boksOptions | false;
 	header: boksOptions | false;
+	headPure?: boksOptions | false;
 };
 
 export type columnProperty = {
@@ -144,7 +157,7 @@ export type columnProperty = {
 	fixed?: boolean;
 };
 export type columnProperties = {
-	[key: string]: columnProperty | number;
+	[key: string]: columnProperty | number | boolean | string;
 };
 
 export type columnSize = {

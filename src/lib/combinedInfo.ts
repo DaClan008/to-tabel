@@ -4,107 +4,232 @@ import { kMaxLength } from 'buffer';
 import * as Events from './events';
 import { ColumnInfo } from './columnInfo';
 import { Alignment, emojiLevel } from '../types/options';
-import { fillSpace } from './helper';
+import { fillSpace, arrayMatch } from './helper';
 import { IColumnSize } from './interfaces';
 
 export class CombinedInfo extends EventEmitter implements IColumnSize {
-	// #region private variables ----------------------------------------------
-	private max = 0;
-
-	private dataMax = -1;
-
-	private sze = 0;
-
-	private hSze = 0;
-
-	private cSze = 0;
-
-	private lnes: string[] = [];
-
-	private ordr = 0;
-
-	private nmeCol: ColumnInfo;
-
-	private numCol: ColumnInfo;
-
+	// #region private variables
+	// GENERAL VARIABLES ======================================================
+	/**
+	 * A variable of spaces which equal the length of the content in the column.
+	 * This is used to put in place of an empty row (no data).
+	 */
 	private emptyC = '';
 
+	/**
+	 * A variable of spaces which equal the length of the header size in the column.
+	 * This is used to put in place of an empty header space (if needed).
+	 */
 	private emptyH = '';
 
+	/**
+	 * Holder of the last verified lines for the header.
+	 * Is used to confirm against current line values and if change, trigger a change event.
+	 */
+	private lnes: string[] = [];
+
+	/**
+	 * A placeholder variable for the Name based column object.
+	 * Makes up the column information together with any number based column if any.
+	 */
+	private nmeCol: ColumnInfo;
+
+	/**
+	 * A placeholder variable for the Number based column object.
+	 * Makes up the column information together with any name based column if any.
+	 */
+	private numCol: ColumnInfo;
+
+	/**
+	 * A variable that if true will change the sizes of the column without emitting
+	 * any event change events.
+	 * @default false
+	 */
 	private silent = false;
-	// #endregion private variables -------------------------------------------
 
-	// #region properties -----------------------------------------------------
-	/**	Return false if either the number ColumInfo or name ColumnInfo is null, else true. */
-	get proper(): boolean {
-		return this.nmeCol != null || this.numCol != null;
+	// SIZE CONFIRMING VARIABLES ==============================================
+
+	/**
+	 * A variable holding the last verified content size.
+	 * Is used to confirm if there were any changes to the current content size.
+	 */
+	private cSze = 0;
+
+	/**
+	 * A variable holding the last verified maximum content size for the column.
+	 * Is used to confirm if there were any changes to the current maximum content size.
+	 */
+	private dataMax = -1;
+
+	/**
+	 * A variable holder the last verified header size for the column.
+	 * Is used to confirm if there were any changes to the current header size.
+	 */
+	private hSze = 0;
+
+	/**
+	 * A variable holding the last verified maximum size for the column.
+	 * Is used to confirm if there were any changes to the current maximum size.
+	 */
+	private max = 0;
+
+	/**
+	 * Variable holding the last verified size for the column.
+	 * Is used to confirm if there were any changes to the current size.
+	 */
+	private sze = 0;
+
+	// #endregion private variables
+
+	// #region properties
+	// STATE PROPERTIES =======================================================
+	/**
+	 * Get the type of alignment used for the for the column content.
+	 */
+	get align(): Alignment {
+		const { numCol, nmeCol } = this;
+		if (nmeCol != null && nmeCol.align !== Alignment.left) return nmeCol.align;
+		if (numCol != null && numCol.align !== Alignment.left) return numCol.align;
+		return Alignment.left;
 	}
 
-	/** Returns the percentage in terms of table size vs column size */
-	get isPercent(): boolean {
-		const nme = this.nmeCol ? this.nmeCol.isPercent : false;
-		const num = this.numCol ? this.numCol.isPercent : false;
-		return nme || num;
-	}
-
-	get tabSize(): number {
-		if (this.nmeCol) return this.nmeCol.tabSize;
-		if (this.numCol) return this.numCol.tabSize;
-		return 2;
-	}
-
+	/**
+	 * Get the emoji level to use when calculating the string size for the column.
+	 * The named Column property is prefered.
+	 */
 	get eLevel(): emojiLevel {
 		if (this.nmeCol) return this.nmeCol.eLevel;
 		if (this.numCol) return this.numCol.eLevel;
 		return emojiLevel.all;
 	}
 
-	/** Returns a string for an empty header line. */
-	get emptyHeader(): string {
-		return this.emptyH;
+	/**
+	 * Get a boolean that is true if the current column has content rows, else false.
+	 */
+	get hasContent(): boolean {
+		const { numCol, nmeCol } = this;
+		return (nmeCol && nmeCol.hasContent) || (numCol && numCol.hasContent);
 	}
 
-	/** Returns a string for an empty content line. */
-	get emptyContent(): string {
-		return this.emptyC;
+	/**
+	 * Get the type of alignment used for the column header.
+	 */
+	get headAlign(): Alignment {
+		const { numCol, nmeCol } = this;
+		if (nmeCol != null && nmeCol.headAlign !== Alignment.left) return nmeCol.headAlign;
+		if (numCol != null && numCol.headAlign !== Alignment.left) return numCol.headAlign;
+		return Alignment.left;
 	}
 
-	/** Get the lines for the header. */
-	get lines(): string[] {
-		if (this.nmeCol == null) {
-			if (this.numCol == null) return [];
-			return this.numCol.lines;
-		}
-		return this.nmeCol.lines;
+	/**
+	 * Get a boolean value which is true if the size of the column pair is fixed.
+	 */
+	get isFixed(): boolean {
+		const nme = this.nmeCol ? this.nmeCol.isFixed : false;
+		const num = this.numCol ? this.numCol.isFixed : false;
+		return nme || num;
 	}
 
-	/** Get the name of this object. */
-	get name(): string {
-		return this.nmeCol == null ? '' : this.nmeCol.name;
+	/**
+	 * Get a boolean value which is true if the setSize is a decimal value, else false.
+	 */
+	get isPercent(): boolean {
+		const nme = this.nmeCol ? this.nmeCol.isPercent : false;
+		const num = this.numCol ? this.numCol.isPercent : false;
+		return nme || num;
 	}
 
-	/** Get the secondary name of this object. */
-	get name2(): string {
-		return this.numCol == null ? '' : this.numCol.name;
-	}
-
+	/**
+	 * Get a boolean which is true if any of the columns in this pair has a fixed maximum size.
+	 */
 	get maxFix(): boolean {
 		return (this.nmeCol && this.nmeCol.maxFix) || (this.numCol && this.numCol.maxFix);
 	}
 
-	/** Get or Set the order number of this object. */
+	/**
+	 * Get a number representing the order of this column pair vs other column pairs.
+	 * If both pairs has different order numbers, the lesser order number is preferred.
+	 */
 	get order(): number {
-		return this.ordr;
+		const { nmeCol, numCol } = this;
+		let order = 0;
+		if (nmeCol && nmeCol.order > 0) order = nmeCol.order;
+		if (numCol && numCol.order > 0) {
+			order = order === 0 ? numCol.order : Math.min(order, numCol.order);
+		}
+		return order;
 	}
 
-	/** Get the maximum size of the data. */
+	/**
+	 * Get a boolean to confirm if the column objects was correctly added.
+	 * The CombinedInfo object will not function properly if proper is false.
+	 */
+	get proper(): boolean {
+		return this.nmeCol != null || this.numCol != null;
+	}
+
+	// SIZE PROPERTIES ========================================================
+	/**
+	 * Get the actual size that the content needs to display as.
+	 */
+	get contentSize(): number {
+		const { numCol, nmeCol } = this;
+		return nmeCol == null ? (numCol == null ? 0 : numCol.contentSize) : nmeCol.contentSize;
+	}
+
+	/**
+	 * Set the size of the other headers in the table.
+	 * This is used when headers are stacked Vertically below each other in a table.
+	 */
+	set headerExternal(val: number) {
+		const { numCol, nmeCol } = this;
+		if (numCol) numCol.headerExternal = val;
+		if (nmeCol) nmeCol.headerExternal = val;
+	}
+
+	/**
+	 * Get the actual size that the header needs to display.
+	 */
+	get headerSize(): number {
+		return this.nmeCol == null
+			? this.numCol == null
+				? 0
+				: this.numCol.headerSize
+			: this.nmeCol.headerSize;
+	}
+
+	/**
+	 * Get the maximum 'data' size for the content component (rows)
+	 */
+	get maxContent(): number {
+		const nme = this.nmeCol == null ? 0 : this.nmeCol.maxContent;
+		const num = this.numCol == null ? 0 : this.numCol.maxContent;
+		return Math.max(nme, num, 0);
+	}
+
+	/**
+	 * Get the maximum 'data' size for the header component.
+	 */
+	get maxHeader(): number {
+		return this.nmeCol == null
+			? this.numCol == null
+				? 0
+				: this.numCol.maxHeader
+			: this.nmeCol.maxHeader;
+	}
+
+	/** Get the maximum size for the column pair */
 	get maxSize(): number {
-		const nme =
-			this.nmeCol == null ? 0 : this.ratio ? this.nmeCol.maxContent : this.nmeCol.maxSize;
+		const { nmeCol, numCol, ratio } = this;
+		const nme = nmeCol == null ? 0 : ratio ? nmeCol.maxContent : nmeCol.maxSize;
 		const num =
-			this.numCol == null ? 0 : this.ratio ? this.numCol.maxContent : this.numCol.maxSize;
-		const nmeFixed = this.nmeCol && this.nmeCol.maxFix;
-		const numFixed = this.numCol && this.numCol.maxFix;
+			numCol != null
+				? ratio || nmeCol
+					? numCol.maxContent || numCol.maxSize
+					: numCol.maxSize
+				: 0;
+		const nmeFixed = nmeCol && (nmeCol.maxFix || nmeCol.isFixed);
+		const numFixed = numCol && (numCol.maxFix || numCol.isFixed);
 		let max = 0;
 
 		if (nmeFixed && !numFixed) max = nme;
@@ -129,152 +254,191 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 		return max;
 	}
 
-	/** Get the minimum size of the columne. */
+	/** Get the minimum size for the column pair */
 	get minSize(): number {
 		const nme = this.nmeCol == null ? 0 : this.nmeCol.minSize;
 		const num = this.numCol == null ? 0 : this.numCol.minSize;
 		return Math.max(nme, num, 0);
 	}
 
-	/** Get the maximum header size of the header data. */
-	get maxHeader(): number {
-		return this.nmeCol == null
-			? this.numCol == null
-				? 0
-				: this.numCol.maxHeader
-			: this.nmeCol.maxHeader;
-	}
-
-	/** Get the maximum data size for the content */
-	get maxContent(): number {
-		const nme = this.nmeCol == null ? 0 : this.nmeCol.maxContent;
-		const num = this.numCol == null ? 0 : this.numCol.maxContent;
-		return Math.max(nme, num, 0);
-	}
-
-	/** Get and set the actual size for the column. */
-	get size(): number {
-		let sze = 0;
-		const fixedNme = this.nmeCol && this.nmeCol.isFixed;
-		const fixedNum = this.numCol && this.numCol.isFixed;
-		if (fixedNme) sze = this.nmeCol.size;
-		else if (fixedNum) sze = this.numCol.size;
-		else if (this.nmeCol) sze = this.nmeCol.size;
-		else sze = this.numCol != null ? this.numCol.size : 0;
-		sze = this.maxFix && this.maxSize > 0 ? Math.min(sze, this.maxSize) : sze;
-		return sze >= this.minSize ? sze : 0;
-	}
-
-	set size(val: number) {
-		let sze = this.maxFix && this.maxSize > 0 ? Math.min(val, this.maxSize) : val;
-		if (sze > -1 && sze < this.minSize) sze = 0;
-		if (sze <= 0) {
-			const fixedNme = this.nmeCol && this.nmeCol.isFixed;
-			const fixedNum = this.numCol && this.numCol.isFixed;
-			if (fixedNme) {
-				if (sze === -1) this.nmeCol.size = -1;
-				sze = this.nmeCol.size > sze && sze > -1 ? 0 : this.nmeCol.size;
-			} else if (fixedNum) {
-				if (sze === -1) this.numCol.size = -1;
-				sze = this.nmeCol.size > sze && sze > -1 ? 0 : this.numCol.maxSize;
-			}
-		}
-		if (this.nmeCol != null) this.nmeCol.size = sze;
-		if (this.numCol != null) this.numCol.size = sze;
-	}
-
-	get spaceSize(): number {
-		return this.nmeCol == null
-			? this.numCol == null
-				? 0
-				: this.numCol.spaceSize
-			: this.nmeCol.spaceSize;
-	}
-
-	/** Get the size of the header column. */
-	get headerSize(): number {
-		return this.nmeCol == null
-			? this.numCol == null
-				? 0
-				: this.numCol.headerSize
-			: this.nmeCol.headerSize;
-	}
-
-	set headerExternal(val: number) {
-		if (this.numCol) this.numCol.headerExternal = val;
-		if (this.nmeCol) this.nmeCol.headerExternal = val;
-	}
-
-	/** Get the size of the content column. */
-	get contentSize(): number {
-		return this.nmeCol == null
-			? this.numCol == null
-				? 0
-				: this.numCol.contentSize
-			: this.nmeCol.contentSize;
-	}
-
-	/** Get or set the ratio of content vs header space. */
+	/**
+	 * Get or set the ratio of the column.
+	 * The ratio is (headersize / (content + headersize)).
+	 * Is used to determine how much space the header should take up vs content
+	 * If the header and content aligns horizontally next to each other.
+	 */
 	get ratio(): number {
-		return this.nmeCol == null
-			? this.numCol == null
-				? 0
-				: this.numCol.ratio
-			: this.nmeCol.ratio;
+		const { numCol, nmeCol } = this;
+		return nmeCol == null ? (numCol == null ? 0 : numCol.ratio) : nmeCol.ratio;
 	}
 
 	set ratio(val: number) {
+		const { numCol, nmeCol } = this;
 		if (val < 0 || val > 1) return;
-		if (this.nmeCol != null) this.nmeCol.ratio = val;
-		if (this.numCol != null) this.numCol.ratio = val;
+		if (nmeCol != null) nmeCol.ratio = val;
+		else if (numCol != null) numCol.ratio = val;
 	}
 
-	/** get or set the size of the table (used with percentage property) */
+	/**
+	 * Get the size that was set for the column pair.
+	 * The named column set size will always take preference over a numbered column.
+	 * @default -1
+	 */
+	get setsize(): number {
+		let val = -1;
+		const { nmeCol, numCol } = this;
+		if (nmeCol) {
+			val = nmeCol.setsize;
+			if (val >= 0) return val;
+		}
+		if (numCol) return numCol.setsize;
+		return -1;
+	}
+
+	/**
+	 * Get and set the actual size for the column.
+	 */
+	get size(): number {
+		let sze = 0;
+		const { nmeCol, numCol, maxFix, maxSize, minSize } = this;
+		const fixedNme = nmeCol && nmeCol.isFixed;
+		const fixedNum = numCol && numCol.isFixed;
+		if (fixedNme) sze = nmeCol.size;
+		else if (fixedNum) sze = numCol.size;
+		else if (nmeCol) sze = nmeCol.size;
+		else sze = numCol != null ? numCol.size : 0;
+		sze = maxFix && maxSize > 0 ? Math.min(sze, maxSize) : sze;
+		return sze >= minSize ? sze : 0;
+	}
+
+	set size(val: number) {
+		const { maxFix, maxSize, minSize, nmeCol, numCol } = this;
+		let sze = maxFix && maxSize > 0 ? Math.min(val, maxSize) : val;
+		if (sze > -1 && sze < minSize) sze = 0;
+		if (sze <= 0) {
+			const fixedNme = nmeCol && nmeCol.isFixed;
+			const fixedNum = numCol && numCol.isFixed;
+			if (fixedNme) {
+				if (sze === -1) nmeCol.size = -1;
+				sze = nmeCol.size > sze && sze > -1 ? 0 : nmeCol.size;
+			} else if (fixedNum) {
+				if (sze === -1) numCol.size = -1;
+				sze = nmeCol.size > sze && sze > -1 ? 0 : numCol.maxSize;
+			}
+		}
+		if (nmeCol != null) nmeCol.size = sze;
+		if (numCol != null) numCol.size = sze;
+	}
+
+	/**
+	 * Get the spacer size for the column.  The spacer is the space between
+	 * the header component and content component if header and content aligns horizontally.
+	 */
+	get spacer(): number {
+		const { nmeCol, numCol } = this;
+		return nmeCol == null ? (numCol == null ? 0 : numCol.spacer) : nmeCol.spacer;
+	}
+
+	/**
+	 * Get the space that the data in the column takes up.  (size - spacer)
+	 * This is same as size, unless ratio is used (header and content is horizontal).
+	 */
+	get spaceSize(): number {
+		const { nmeCol, numCol } = this;
+		return nmeCol == null ? (numCol == null ? 0 : numCol.spaceSize) : nmeCol.spaceSize;
+	}
+
+	/**
+	 * Get or set the size of the table (used with percentage property)
+	 */
 	get tableSize(): number {
-		const nme = this.nmeCol ? this.nmeCol.tableSize : -1;
-		const num = this.numCol ? this.numCol.tableSize : -1;
+		const { numCol, nmeCol } = this;
+		const nme = nmeCol ? nmeCol.tableSize : -1;
+		const num = numCol ? numCol.tableSize : -1;
 		return nme === -1 && num === -1 ? 0 : Math.max(nme, num);
 	}
 
 	set tableSize(val: number) {
+		const { numCol, nmeCol } = this;
 		/* istanbul ignore else: no else */
-		if (this.nmeCol != null) this.nmeCol.tableSize = val;
-		if (this.numCol != null) this.numCol.tableSize = val;
+		if (nmeCol != null) nmeCol.tableSize = val;
+		if (numCol != null) numCol.tableSize = val;
 	}
 
-	/** Get the type of alignment for the content. */
-	get align(): Alignment {
-		if (this.nmeCol != null && this.nmeCol.align !== Alignment.left) return this.nmeCol.align;
-		if (this.numCol != null && this.numCol.align !== Alignment.left) return this.numCol.align;
-		return Alignment.left;
+	/**
+	 * Get the tab sizing to use (spacing for tab characters) for this column.
+	 * A named column tabSizing takes preference.
+	 */
+	get tabSize(): number {
+		const { nmeCol, numCol } = this;
+		if (nmeCol) return nmeCol.tabSize;
+		if (numCol) return numCol.tabSize;
+		return 2;
 	}
 
-	/** Get the type of alignment for the header. */
-	get headAlign(): Alignment {
-		if (this.nmeCol != null && this.nmeCol.headAlign !== Alignment.left) {
-			return this.nmeCol.headAlign;
-		}
-		if (this.numCol != null && this.numCol.headAlign !== Alignment.left) {
-			return this.numCol.headAlign;
-		}
-		return Alignment.left;
+	// STRING PROPERTIES ======================================================
+	/**
+	 * Get a space filled string value equal in length as content size of the column
+	 * Used when an empty content space is needed.
+	 */
+	get emptyContent(): string {
+		return this.emptyC;
 	}
+
+	/**
+	 * Get a of space filled string value equal in length as header size of the column.
+	 * Used when an empty header space is needed.
+	 */
+	get emptyHeader(): string {
+		return this.emptyH;
+	}
+
+	/**
+	 * Get a string array with the lines of the header component (excluding padding etc).
+	 */
+	get lines(): string[] {
+		if (this.nmeCol == null) {
+			if (this.numCol == null) return [];
+			return this.numCol.lines;
+		}
+		return this.nmeCol.lines;
+	}
+
+	/**
+	 * Get the name of the named column in this column pair.
+	 * If no named column exists returns an empty string.
+	 */
+	get name(): string {
+		return this.nmeCol == null ? '' : this.nmeCol.name;
+	}
+
+	/**
+	 * Get the name of the numbered column in this column pair.
+	 * If no numbered column exists returns an empty string.
+	 */
+	get name2(): string {
+		return this.numCol == null ? '' : this.numCol.name;
+	}
+
 	// #endregion properties --------------------------------------------------
 
 	constructor(nmeInfo: ColumnInfo, numInfo?: ColumnInfo) {
 		super();
 		if (nmeInfo == null && numInfo == null) return;
-		this.addInfo(nmeInfo, numInfo);
+		this.addCol(nmeInfo, numInfo);
 		if (this.nmeCol && this.numCol && this.numCol.isFixed) this.size = -1;
 	}
 
 	// #region Event Handlers -------------------------------------------------
-	/** monitor changes to the maximum size of the column. */
+	/**
+	 * Is called when the maximum size change of one of the column pairs
+	 * affects the layout of the column.
+	 */
 	private maxEventListener = (col: ColumnInfo): void => {
-		const { max, maxSize, dataMax, maxContent, name2, silent } = this;
+		const { max, maxSize, dataMax, maxContent, name2, silent, nmeCol } = this;
 		if ((max === maxSize && dataMax === maxContent) || silent) return;
-		if (col.name === name2 && this.nmeCol) {
-			this.nmeCol.setExternalMax(col.maxContent);
+		if (col.name === name2 && nmeCol) {
+			nmeCol.setExternalMax(col.maxContent);
 			return;
 		}
 		this.max = maxSize;
@@ -285,23 +449,31 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 		this.changeEmpties();
 	};
 
-	/** Monitor changes to the total size of the column */
+	/**
+	 * Is called when a size change on one of the column pairs
+	 * affects the layout of the column.
+	 */
 	private sizeEventListener = (col: ColumnInfo): void => {
 		const { sze, size, silent, name2, nmeCol, numCol } = this;
 		if (sze === size || silent) return;
+
 		if (col.name === name2 && nmeCol) {
 			const fixedNme = nmeCol && nmeCol.isFixed;
 			const fixedNum = numCol && numCol.isFixed;
+			/* istanbul ignore else: no else in test */
 			if (fixedNum && !fixedNme && nmeCol != null) nmeCol.size = col.size;
 			return;
 		}
-		this.sze = this.size;
+		this.sze = size;
+		if (numCol) numCol.size = size;
 		this.changeEmpties();
 		this.emit(Events.EventChangeSize, this);
 	};
 
-	// todo: the hSze did not corectly update when num content is larger.
-	/** Monitor changes to the ratio being set. */
+	/**
+	 * Is called when the ratio change of one of the column pairs
+	 * affects the layout of the column
+	 */
 	private ratioEventListener = (col: ColumnInfo): void => {
 		const { hSze, headerSize, cSze, contentSize, silent } = this;
 		if ((hSze === headerSize && cSze === contentSize) || silent) return;
@@ -312,159 +484,65 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 		this.emit(Events.EventChangeRatio, this);
 	};
 
-	/** monitor changes to the lines for the header. */
+	/**
+	 * Is called when the lines of one of the column pairs has changed.
+	 */
 	private linesEventListener = (col: ColumnInfo): void => {
-		if ((col.name === this.name2 && this.nmeCol) || this.silent) return;
-		let changed = false;
-		if (this.lnes.length !== this.lines.length) changed = true;
-		else {
-			for (let i = 0, len = this.lnes.length; i < len; i++) {
-				/* istanbul ignore else: no else */
-				if (this.lnes[i] !== this.lines[i]) {
-					changed = true;
-					i = len;
-				}
-			}
-		}
+		const { nmeCol, name2, lnes, lines, silent } = this;
+		if ((col.name === name2 && nmeCol) || silent) return;
+
 		/* istanbul ignore else: no else */
-		if (changed) {
+		if (!arrayMatch(lines, lnes)) {
 			this.fillArray();
 			this.emit(Events.EventChangeLines, this);
 		}
 	};
 
-	/** monitor changes to the order of the column */
-	private orderEventListener = (col: ColumnInfo): void => {
-		if (this.ordr === col.order) return;
-		this.ordr = col.order;
-		if (!this.silent) this.emit(Events.EventChangeOrder, this);
-	};
 	// #endregion Event Handlers ----------------------------------------------
 
 	// #region private functions ----------------------------------------------
 	/**
-	 * Fixes the lines item.
+	 * Copy the values of the lnes array to the lines array.
 	 */
 	private fillArray(): void {
-		this.lnes = [];
-		this.lines.forEach(line => {
-			this.lnes.push(line);
-		});
+		this.lnes = this.lines.map(line => line, []);
 	}
 
 	/**
-	 * Remove a Columninfo item from this object.
-	 * @param {ColumnInfo} itm The ColumnInfo item to be removed.
-	 * @returns {void}
-	 */
-	private removeInfo(nmeObject: boolean): void {
-		const unregister = (itm: ColumnInfo) => {
-			// remove event listeners
-			itm.removeListener(Events.EventChangeMax, this.maxEventListener);
-			itm.removeListener(Events.EventChangeSize, this.sizeEventListener);
-			itm.removeListener(Events.EventChangeRatio, this.ratioEventListener);
-			itm.removeListener(Events.EventChangeLines, this.linesEventListener);
-			itm.removeListener(Events.EventChangeOrder, this.orderEventListener);
-		};
-
-		if (nmeObject) {
-			if (this.nmeCol == null) return;
-			/* istanbul ignore else: no else */
-			if (this.name !== this.name2) unregister(this.nmeCol);
-			this.nmeCol = null;
-		} else {
-			if (this.numCol == null) return;
-			/* istanbul ignore else: no else */
-			if (this.name !== this.name2) unregister(this.numCol);
-			this.numCol = null;
-		}
-	}
-
-	/**
-	 * Add items or change ColumnInfo items to this object
-	 * @param {ColumnInfo} nmeInfo The name related item for the object.
-	 * @param {columnInfo} numInfo the number related item for this object.
-	 */
-	private addInfo(nmeInfo: ColumnInfo, numInfo: ColumnInfo): void {
-		const addListeners = (itm: ColumnInfo): void => {
-			itm.on(Events.EventChangeMax, this.maxEventListener);
-			itm.on(Events.EventChangeSize, this.sizeEventListener);
-			itm.on(Events.EventChangeRatio, this.ratioEventListener);
-			itm.on(Events.EventChangeLines, this.linesEventListener);
-			itm.on(Events.EventChangeOrder, this.orderEventListener);
-		};
-		if (nmeInfo == null && numInfo == null) return;
-		const { tableSize } = nmeInfo || numInfo;
-		let order = 0;
-		let change = false;
-		if (nmeInfo != null && this.nmeCol !== nmeInfo) {
-			this.removeInfo(true);
-			this.nmeCol = nmeInfo;
-			addListeners(this.nmeCol);
-			order = nmeInfo.order;
-			change = true;
-		} else if (tableSize > 0 && this.nmeCol != null && this.nmeCol.tableSize !== tableSize) {
-			this.nmeCol.tableSize = tableSize;
-		}
-
-		if (numInfo != null && this.numCol !== numInfo) {
-			this.removeInfo(false);
-			this.numCol = numInfo;
-			if (this.numCol !== this.nmeCol) addListeners(this.numCol);
-			change = true;
-			if (numInfo.order && order === 0) order = numInfo.order;
-		}
-		if (tableSize > 0 && this.numCol != null && this.numCol.tableSize !== tableSize) {
-			this.numCol.tableSize = tableSize;
-		}
-
-		if (!change || !this.proper) return;
-		this.reset();
-		if (order > 0 && order !== this.ordr) {
-			this.ordr = order;
-			this.emit(Events.EventChangeOrder, this);
-		}
-	}
-
-	/**
-	 * Fixes the sizes to allow internal monitoring of any changes.
+	 * Fixes the locally stored size variables to allow internal monitoring of any changes.
+	 * @param silent If set to true, will not emit any events on any changes made.  Default = false
 	 */
 	private fixSizes(silent = false): void {
 		let changed = false;
 		// max
-		if (this.max !== this.maxSize) {
-			this.max = this.maxSize;
+		const { max, maxSize } = this;
+		if (max !== maxSize) {
+			this.max = maxSize;
 			changed = true;
 			/* istanbul ignore else: no else */
 			if (!silent) this.emit(Events.EventChangeMax, this);
 		}
 		// ratio
-		if (this.hSze !== this.headerSize) {
-			this.hSze = this.headerSize;
+		const { hSze, headerSize } = this;
+		if (hSze !== headerSize) {
+			this.hSze = headerSize;
 			changed = true;
 			/* istanbul ignore else: no else */
 			if (!silent) this.emit(Events.EventChangeRatio, this);
 		}
 		// lines
-
-		if (this.lnes.length !== this.lines.length) {
+		const { lnes, lines } = this;
+		if (!arrayMatch(lnes, lines)) {
 			this.fillArray();
-			/* istanbul ignore else: no else */
+			changed = true;
+			/* istanbul ignore else: else never ran - safety */
 			if (!silent) this.emit(Events.EventChangeLines, this);
-		} /* istanbul ignore else: no else */ else if (this.lnes.length > 0) {
-			for (let i = 0, len = this.lines.length; i < len; i++) {
-				// todo create test to hit these lines.
-				/* istanbul ignore if: if never hit during tests */
-				if (this.lnes[i] !== this.lines[i]) {
-					this.fillArray();
-					if (!silent) this.emit(Events.EventChangeLines, this);
-					i = len;
-				}
-			}
 		}
+
 		// size
-		if (this.sze !== this.size) {
-			this.sze = this.size;
+		const { sze, size } = this;
+		if (sze !== size) {
+			this.sze = size;
 			changed = true;
 			/* istanbul ignore else: no else */
 			if (!silent) this.emit(Events.EventChangeSize, this);
@@ -472,22 +550,87 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 
 		// fix if needs be
 		if (changed) this.changeEmpties();
-		if (this.nmeCol != null) {
-			if (Math.max(this.nmeCol.tableSize, 0) !== this.tableSize) {
-				this.nmeCol.tableSize = this.tableSize;
-			}
-			if (this.nmeCol.size !== this.size) this.nmeCol.internalSizeChange(this.size);
+		const { nmeCol, numCol, tableSize, size: size2 } = this;
+		// fix nmeCol tableSize and size
+		if (nmeCol != null) {
+			if (Math.max(nmeCol.tableSize, 0) !== tableSize) this.nmeCol.tableSize = tableSize;
+			if (nmeCol.size !== size2) this.nmeCol.internalSizeChange(size2);
 		}
-		if (this.numCol == null) return;
-		if (Math.max(this.numCol.tableSize, 0) !== this.tableSize) {
-			this.numCol.tableSize = this.tableSize;
-		}
-		if (this.numCol.size !== this.size) this.numCol.internalSizeChange(this.size);
+		if (numCol == null) return;
+		// fix numCol tableSize and size
+		if (Math.max(numCol.tableSize, 0) !== tableSize) this.numCol.tableSize = tableSize;
+		if (numCol.size !== size2) this.numCol.internalSizeChange(size2);
 	}
 
 	// #endregion private function --------------------------------------------
 
 	// #region public funcionts -----------------------------------------------
+	/**
+	 * Compare and add new info objects to this object.
+	 * @param nmeInfo A potentially new name info object for this object.
+	 * @param numInfo A potentially new number info object for this object.
+	 */
+	addCol(nmeInfo: ColumnInfo, numInfo: ColumnInfo): boolean {
+		const addListeners = (itm: ColumnInfo): void => {
+			itm.on(Events.EventChangeMax, this.maxEventListener);
+			itm.on(Events.EventChangeSize, this.sizeEventListener);
+			itm.on(Events.EventChangeRatio, this.ratioEventListener);
+			itm.on(Events.EventChangeLines, this.linesEventListener);
+		};
+
+		if ((nmeInfo == null && numInfo == null) || (this.nmeCol != null && this.numCol != null)) {
+			return false;
+		}
+		let order = 0;
+		let change = false;
+		// add columns if needed
+		if (nmeInfo != null && this.nmeCol == null) {
+			this.nmeCol = nmeInfo;
+			order = nmeInfo.order;
+			change = true;
+		}
+
+		if (numInfo != null && this.numCol == null) {
+			this.numCol = numInfo;
+			change = true;
+			if (numInfo.order && order === 0) order = numInfo.order;
+		}
+		// sort out table sizes
+		if (!change || !this.proper) return false;
+
+		const { tableSize } = nmeInfo || numInfo;
+		if (tableSize > 0 && this.tableSize !== tableSize) this.tableSize = tableSize;
+		// merge values
+		let size = -1;
+		let maxContent = -1;
+		this.silent = true;
+		if (this.numCol != null) {
+			this.numCol.reset();
+			size = this.numCol.isFixed ? this.numCol.size : -1;
+			maxContent = size > 0 ? size : this.numCol.maxContent;
+		}
+		if (this.nmeCol != null) {
+			this.nmeCol.reset();
+			size = this.nmeCol.isFixed ? this.nmeCol.size : -1;
+			if (maxContent > 0) this.nmeCol.setExternalMax(maxContent, size);
+			if (size > -1) this.hSze = this.headerSize;
+		}
+		this.silent = false;
+		this.fixSizes();
+
+		if (this.nmeCol != null && !this.nmeCol.listening) {
+			addListeners(this.nmeCol);
+			this.nmeCol.listening = true;
+		}
+
+		if (this.numCol != null && !this.numCol.listening) {
+			addListeners(this.numCol);
+			this.numCol.listening = true;
+		}
+
+		return true;
+	}
+
 	/**
 	 * Changes the empty values (The spacing used if header / content has no value)
 	 */
@@ -500,47 +643,21 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	}
 
 	/**
-	 * Compare and add new info objects to this object.
-	 * @param nmeInfo A potentially new name info object for this object.
-	 * @param numInfo A potentially new number info object for this object.
-	 */
-	compare(nmeInfo: ColumnInfo, numInfo: ColumnInfo): void {
-		this.addInfo(nmeInfo, numInfo);
-	}
-
-	/** reset all size values. */
-	reset(): void {
-		let size = -1;
-		let maxContent = -1;
-		this.silent = true;
-		if (this.numCol != null) {
-			this.numCol.reset();
-			size = this.numCol.isFixed ? this.numCol.size : -1;
-			maxContent = size > 0 ? size : this.numCol.maxContent;
-		}
-		if (this.nmeCol != null) {
-			this.nmeCol.reset();
-			size = this.nmeCol.isFixed ? -1 : size;
-			if (maxContent > 0) this.nmeCol.setExternalMax(maxContent, size);
-			if (size > -1) this.hSze = this.headerSize;
-		}
-		this.silent = false;
-		this.fixSizes();
-	}
-
-	resetContent(): void {
-		if (this.numCol != null) this.numCol.resetContent();
-		if (this.nmeCol != null) this.nmeCol.resetContent();
-	}
-
-	/**
-	 * Set the size of the spacing between 2 column data objects.
+	 * Set the size of the spacing used between 2 column data objects.
 	 * @param padding The padding size of the column.  Default = 2.
 	 * @param vBorderSpace The verticalborder size.  Default = 0.
 	 */
 	changeSpace(padding = 2, vBorderSpace = 0): void {
 		if (this.nmeCol) this.nmeCol.changeSpace(padding, vBorderSpace);
 		if (this.numCol) this.numCol.changeSpace(padding, vBorderSpace);
+	}
+
+	/**
+	 * Resets the internal maxContent value.
+	 */
+	resetContent(): void {
+		if (this.numCol != null) this.numCol.resetContent();
+		if (this.nmeCol != null) this.nmeCol.resetContent();
 	}
 	// #endregion public function ---------------------------------------------
 }

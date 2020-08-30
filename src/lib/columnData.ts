@@ -1,71 +1,87 @@
-import { getStringSize, getStringLines } from './helper';
+import { getStringSize, getStringLines, arrayMatch } from './helper';
 import { BaseData } from './baseData';
 import { emojiLevel } from '../types/options';
 
 export class ColumnData extends BaseData {
+	/**
+	 * An Array of lines (string values) for the current data object.
+	 * @public
+	 */
 	lines: string[] = [];
 
-	private max = -1;
+	/**
+	 * A variable storing the maximum size of the data.
+	 * @readonly
+	 */
+	private readonly max: number;
 
-	private prevSize = -1;
+	readonly isRawData = true;
 
+	/**
+	 * A variable storing the size of the data that has been set.
+	 */
+	private setContentSize = -1;
+
+	/**
+	 * Get the string value of the table.
+	 * @public
+	 */
+	get value(): string {
+		return this.val;
+	}
+
+	/** Get the actual size (width) of the data object. */
+	get maxData(): number {
+		return this.max;
+	}
+
+	/**
+	 * Get a value by which the size of the data should be reduced by.
+	 * This will always be 0 in the case of a columnData object.
+	 */
+	protected get sizeAdjuster(): number {
+		return 0;
+	}
+
+	/**
+	 * Stores a string value at a specified cell (row, column) inside a table.
+	 * @param key The key or column name of the data.
+	 * @param val The acual value / data.
+	 * @param tabSpace indicate how large the tabSpacing should be (for tab characters).
+	 * @param row The row number where the data will be placed.
+	 * @param eLevel The emoji level to be used when calculating size.
+	 */
 	constructor(
 		key: string,
 		private val: string,
 		tabSpace: number,
 		row: number,
 		private readonly eLevel = emojiLevel.all,
-		maxSize?: number,
 	) {
-		super(key, row, maxSize);
+		super(key, row, -1);
 		const size = getStringSize(val || '', tabSpace, eLevel);
 		this.val = size.val;
 		this.max = size.size;
-		this.lines = getStringLines(this.val, -1, this.eLevel);
+		this.buildLines();
 	}
 
-	sizeChanged(): boolean {
-		if (this.size === this.prevSize) return false;
-		this.prevSize = this.size;
-		return true;
+	/**
+	 * Is called whenever the size of the dataobject should change.
+	 */
+	protected sizeChanged(): void {
+		/* ignore empty */
 	}
 
-	buildLines(force = false): boolean {
+	/**
+	 * Build the lines for the current data.
+	 */
+	protected buildLines(force = false): boolean {
 		/* istanbul ignore else: no else */
-		let changed = false;
+		const { size, val, eLevel, setContentSize: prevSize, max, lines: old } = this;
+		this.setContentSize = size;
+		if (prevSize >= max && size >= max) return true;
 
-		/* istanbul ignore else: no else */
-		if (this.size <= 0 || !this.val) {
-			changed = this.lineCount !== 0;
-			this.lines = [];
-			return changed;
-		}
-		const lines = getStringLines(this.val, this.size, this.eLevel);
-		/* istanbul ignore else: no else */
-		if (lines.length !== this.lineCount) changed = true;
-
-		for (let i = 0, len = lines.length; i < len; i++) {
-			/* istanbul ignore else: no else */
-			if (lines[i] !== this.lines[i]) {
-				changed = true;
-				i = len;
-			}
-		}
-		/* istanbul ignore else: no else */
-		if (!changed) return false;
-		this.lines = lines;
-		return true;
-	}
-
-	get isRawData(): boolean {
-		return true;
-	}
-
-	get value(): string {
-		return this.val;
-	}
-
-	get maxData(): number {
-		return this.max;
+		this.lines = size <= 0 || !val ? [] : getStringLines(val, size, eLevel);
+		return force ? !arrayMatch(old, this.lines) : true;
 	}
 }

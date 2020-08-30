@@ -1,83 +1,292 @@
 import { EventEmitter } from 'events';
 import * as Events from './events';
 import { columnProperty, Alignment, emojiLevel } from '../types/options';
-import { isNum, getStringSize, getStringLines, fillSpace, fillLine } from './helper';
+import { isNum, getStringSize, getStringLines, fillLine, arrayMatch } from './helper';
 
 /**
  * A class for column information.
  * @internal
  */
 export class ColumnInfo extends EventEmitter {
-	// #region private variables and properties -------------------------------
-	private nme: string;
-
-	private lnes: string[] = [];
+	// #region variables
+	// GENERAL ================================================================
+	/**
+	 * A variable storing the Alignment of the content.  Set at initialization.
+	 * @readonly
+	 * @public
+	 */
+	readonly align: Alignment;
 
 	/**
-	 * The space to calculate between 2 columns if a non-flat structure is used. (i.e. ratio > 0)
+	 * A variable storing the emojiLevel to use for calculating string sizes
+	 * @readonly
+	 * @public
+	 */
+	readonly eLevel: emojiLevel;
+
+	/**
+	 * A variable storing the Alignment of the header.  Set at initialization.
+	 * @readonly
+	 * @public
+	 */
+	readonly headAlign: Alignment;
+
+	/**
+	 * An array storing the Column header (PrintName value in table form)
+	 * depending on the size of the column.
+	 */
+	private lnes: string[] = [];
+
+	/** A variable that stores the name of the columns */
+	private nme: string;
+
+	/**
+	 * a variable storing the order number of this column vs other columns in the table.
+	 * @default 0
+	 * @readonly
+	 */
+	private readonly ordr: number;
+
+	/**
+	 * A pattern to use when the name of the columns is a number.
+	 * The number will usualy placed where ~D is situated.
+	 * @default col-~D
+	 * @readonly
+	 */
+	private readonly pattern: string;
+
+	/** A variable storing the display name of the columns (might be different to nme) */
+	private prntName: string;
+
+	// SIZEING ================================================================
+	/**
+	 * A variable storing the size of the maximum DATA items inside the column.
+	 * (excluding padding and the header size)
+	 */
+	private dataMaxSize = -1;
+
+	/**
+	 * A variable storing the maximum header size of the bound column.
+	 * i.e. if there are columns with numbers and names,
+	 * the joined columns max header size is stored here.
+	 */
+	private externalHead = -1;
+
+	/**
+	 * A variable storing the size of the maximum DATA itmes inside a bound column.
+	 * i.e. if there are columns with numbers and names,
+	 * the joined columns max data size is stored here.  This is used together with
+	 * dataMaxSize to determine the current maximum data size inside the column.
+	 */
+	private externalMax = -1;
+
+	/**
+	 * A variable storing the size of the header component of the column.
+	 * This is usually only set at initialization.
+	 */
+	private headerMaxSize = 0;
+
+	/**
+	 * A variable storing the calculate ratio between header and data components of the column.
+	 * This should never really be 0 after initialization.
+	 * If no content has been recieved the intRat will be 0.5
+	 */
+	private intRat = 0;
+
+	/**
+	 * A variable that stores the previously sized used when building lines (buildlines function).
+	 * If the current size is equal to this value, buildLines will not run again.
+	 */
+	private prevSize = 0;
+
+	/**
+	 * A variable that is used by the sizing function.
+	 * This stores the last size a table was set to be, and is mostly used when table is a decimal
+	 * or percentage value of the table.  When the column can't be set to the desired size
+	 * but tablesize later changes.  The table change might result in the size stored here to be set.
+	 */
+	private prevSetSize = -1;
+
+	/**
+	 * A variable storing the set ratio that should be used between columns and headers.
+	 * This size is limited between 0 and 1.
+	 */
+	private rat = 0;
+
+	/**
+	 * A variable storing the real size as set by the table from time to time.
+	 * This is the actual size the column should be.
+	 */
+	private real = -2;
+
+	/**
+	 * A variable storing the fixed maximum size of the column (set at initialization)
+	 * @readonly
+	 */
+	private readonly setMaxSize: number;
+
+	/**
+	 * A variable storing the fixed minimum size of the column (set at initialization).
+	 * @readonly
+	 */
+	private readonly setMinSize: number;
+
+	/**
+	 * A variable storing any fixed sizes of the column (set at initialization).
+	 * @readonly
+	 * @public
+	 */
+	readonly setsize;
+
+	/**
+	 * A variable storing the total space that should be used between header and content.
+	 * (If header and content is aligned horizontally)
+	 * .. header | content ) =>
+	 *   (header|->|content),  |->| = space.
 	 * Typically it is 2 x padding + border size.
 	 */
 	private space: number;
 
-	readonly eLevel: emojiLevel;
-
-	/** the actual size of the column set at start (including padding) */
-	private readonly setSize;
-
-	private readonly pattern: string;
-
-	readonly tabSize: number;
-
-	private readonly setMinSize: number;
-
-	// must be different to size in order to allow initial building of lines.
-	private prevSize = 0;
-
-	/** The actual maximum size of the column (including padding). Set at the start. */
-	private readonly setMaxSize: number;
-
+	/**
+	 * A variable storing the size of the table where column is used.
+	 * This is used when the setSize variable is a decimal amount
+	 * which indicates a size as a percentage of table size.
+	 */
 	private table = -1;
 
-	// allow initialization by size component (do not make it -1)
-	private real = -2;
+	/**
+	 * A variable storing the size to be given to tab characters.
+	 * @readonly
+	 * @public
+	 */
+	readonly tabSize: number;
 
-	private prevSetSize = -1;
-
-	private prntName: string;
-
-	private ordr: number;
-
+	// STATE ==================================================================
+	/**
+	 * Variable that if true, Indicate that the current size of the column was auto determined else
+	 * the size was set to a specific value.
+	 * NOTE: this exclude sizes set on initialization.
+	 */
 	private autoData = true;
 
-	/** the actual maximum size of the data in the column (excluding padding). */
-	private dataMaxSize = -1;
-
-	private externalMax = -1;
-
-	private externalHead = -1;
-
-	/** the actual maximum size of the header of the column (excluding padding) */
-	private headerMaxSize = 0;
+	/**
+	 * A variable set at startup to indicate whether the size of the column should be fixed.
+	 * @readonly
+	 */
+	private readonly fixed?: boolean;
 
 	/**
-	 * Value between 0 and 1.  Indicate the header size compared to content size if not flat.
+	 * A variable set by combinedInfo object to indicate that events listeners has been
+	 * registered against this object.
+	 * @public
 	 */
-	private rat = 0;
+	listening = false;
 
-	private intRat = 0;
-	//	#endregion private properties and variables ---------------------------
+	/**
+	 * An object that is used to ensure the events are called in the correct order,
+	 * when the ratio has changed.
+	 */
+	private ratioEvnt = {
+		isRatio: false,
+		content: -1,
+		head: -1,
+	};
 
-	// #region public properties and variables --------------------------------
-	get hasContent(): boolean {
-		return this.dataMaxSize > -1;
+	/**
+	 * A variable when true indicate that no header should be included in this Column.
+	 * @default false
+	 * @readonly
+	 */
+	private readonly excludeHead: boolean;
+	// #endregion
+
+	// #region properties
+	// SIZING =================================================================
+	/**
+	 * Get the actual size that the content will be printed in the column.
+	 * This may be differrent from maxContent as it takes into account the size value.
+	 */
+	get contentSize(): number {
+		const { size, ratio, rat, autoData, headerMaxSize, setSize, isFixed, excludeHead } = this;
+		let dataMax = Math.max(0, this.dataMaxSize, this.externalMax);
+		if (size === 0 && !autoData) return 0;
+		if (ratio) {
+			const { headerSize, space } = this;
+			if (headerSize === 0) return 0;
+			if (rat === 1 && autoData && !isFixed) {
+				return dataMax === 0 && headerSize > 0
+					? Math.round(headerSize / ratio - headerSize)
+					: dataMax;
+			}
+			return size - headerSize - space;
+		}
+		if (this.setMaxSize > -1) dataMax = Math.min(this.setMaxSize, dataMax);
+		if (autoData) {
+			const head = excludeHead ? 0 : headerMaxSize;
+			return isFixed && setSize > -1
+				? setSize
+				: Math.max(head, dataMax, setSize, this.setMinSize);
+		}
+		return size;
 	}
 
-	get isFixed(): boolean {
-		if (this.fixed === false) return false;
-		return (this.isPercent && this.table > -1) || (this.fixed && !this.isPercent);
+	/**
+	 * Set the size of external headers. this is used when ratio is more than one
+	 * and the size of the header is deteremined by the size of the header of all the columns.
+	 */
+	set headerExternal(val: number) {
+		this.externalHead = val < 0 ? 0 : val;
 	}
 
-	/** Return true if maxsize was set at startup */
+	/**
+	 * Get the size the header takes up in the column (excluding spacing)
+	 * This may be different from maxHeader as it is determined by the size of the column.
+	 * This is the ACTUAL printed size for the header component.
+	 */
+	get headerSize(): number {
+		const { size, ratio, autoData, isFixed } = this;
+		if (size === 0 && !autoData) return 0;
+		if (ratio > 0) {
+			const { maxHeader, space } = this;
+			if (autoData && !isFixed) return maxHeader;
+			if (size - space < 1) return 0;
+			return Math.round((size - space) * ratio);
+		}
+		if (this.excludeHead) return 0;
+		const { headerMaxSize, dataMaxSize, externalMax } = this;
+		if ((size === -1 || autoData) && !isFixed) {
+			// const head = excludeHead ? 0 : headerMaxSize;
+			return Math.max(this.setMinSize, headerMaxSize, dataMaxSize, externalMax);
+		}
+		return size;
+	}
+
+	/**
+	 * get the actual maximum size of the content (data) (excluding padding)
+	 * inside the column.  This ignores maxHeader size.
+	 * Used to set the size of the column data when the data is received.
+	 */
+	get maxContent(): number {
+		return Math.max(0, this.dataMaxSize, this.externalMax);
+	}
+
+	set maxContent(val: number) {
+		if (this.dataMaxSize >= val) return;
+		const { maxSize, maxContent, dataMaxSize } = this;
+		this.dataMaxSize = Math.max(dataMaxSize, val);
+		if (maxContent === this.maxContent) return;
+		if (!this.maxFix && !this.isFixed && maxSize !== this.maxSize) {
+			this.emit(Events.EventChangeMax, this);
+		}
+		this.setRatio();
+		if (this.autoData) this.size = -1;
+		/* istanbul ignore else: no else */ else if (this.rat === 0) this.buildLines();
+	}
+
+	/**
+	 * Get a boolean when true indicate that the maximum size of this column has been set
+	 * and is determinable (i.e. maximum size can be a fraction that requires a table size).
+	 */
 	get maxFix(): boolean {
 		if (this.setMaxSize < 0 || this.setMaxSize == null) return false;
 		if (this.setMaxSize < 1 && this.table < 0) return false;
@@ -85,22 +294,218 @@ export class ColumnInfo extends EventEmitter {
 	}
 
 	/**
-	 * Get the percentage value of the size of this collumn inside a table size.
-	 * Set on initialization (options).
+	 * Get the actual maximum size of the header (data) (excluding padding).
 	 */
-	get isPercent(): boolean {
-		return this.setSize > 0 && this.setSize < 1;
+	get maxHeader(): number {
+		return this.rat > 0 ? Math.max(this.headerMaxSize, this.externalHead) : this.headerMaxSize;
 	}
 
 	/**
-	 * Get the internal name for the column. this is only set on intialization. */
+	 * Get the maximum size of the current collumn (in total)
+	 * (include middle padding for ratio type data).
+	 */
+	get maxSize(): number {
+		const { maxContent, ratio, headerMaxSize, space, excludeHead, setMaxSize } = this;
+		const max = this.valueAdjuster(setMaxSize);
+		if (ratio > 0) {
+			if (max >= 1) return max;
+			return Math.max(0, maxContent + headerMaxSize + space);
+		}
+		// calculate if not flat
+		const { isFixed, maxFix, setSize, minSize } = this;
+		const fix = this.valueAdjuster(setSize);
+		if (isFixed && fix >= minSize) return fix;
+		if (maxFix) {
+			return max > -1 && max < minSize ? 0 : Math.max(max, minSize);
+		}
+		const head = excludeHead ? 0 : headerMaxSize;
+		return Math.max(
+			0,
+			Math.max(head, minSize > 0 ? Math.max(minSize, maxContent) : maxContent),
+		);
+	}
+
+	/** Get the minimum size that the column can be.  Set at startup. */
+	get minSize(): number {
+		return Math.max(0, this.setMinSize, this.rat > 0 && this.rat < 1 ? this.space + 2 : 0);
+	}
+
+	/**
+	 * Get or set the ratio in which the header and content could allign.
+	 * 0 = no ratio is set and header and content will allign vertically [header above content].
+	 * 1 = ratio will be set to internal calculated ratio and header and content will be Horizontal
+	 * The actual ratio is used when value is between 0 and 1 (header aligned horizontal to content)
+	 */
+	get ratio(): number {
+		return this.excludeHead ? 0 : this.rat === 1 ? this.intRat : this.rat;
+	}
+
+	set ratio(val: number) {
+		if (val === this.rat || val < 0 || val > 1) return;
+		this.ratioEvnt = {
+			isRatio: true,
+			content: this.contentSize,
+			head: this.headerSize,
+		};
+		this.rat = val;
+		const { autoData, setSize } = this;
+		if (autoData) this.size = -1;
+		else if (setSize > 0) {
+			const { space, ratio } = this;
+			const sz = this.valueAdjuster(setSize);
+			this.size = ratio ? Math.round(sz / (1 - ratio) + space) : sz;
+		}
+		this.ratioEventCheck();
+	}
+
+	/**
+	 * Get the size set for the column at initialization.
+	 * If no size has been set, this will be -1.
+	 * If a fraction has been set on intialization and a table size is available,
+	 * a calculated size will be returned.
+	 */
+	get setSize(): number {
+		return this.valueAdjuster(this.setsize);
+	}
+
+	/**
+	 * Get or set a desired size of the (total) column
+	 * including padding but exclude any borders.
+	 */
+	get size(): number {
+		return this.real;
+	}
+
+	set size(val: number) {
+		let amnt = Math.floor(val);
+		const { isFixed, setSize, real, rat, space } = this;
+
+		if (isFixed && val !== 0 && rat === 0) {
+			const m = this.valueAdjuster(this.setMaxSize);
+			const fix = m >= 0 && this.setsize < 1 && setSize > m ? m : setSize;
+			amnt = val < 0 ? fix : fix > val ? 0 : fix;
+		}
+		if (amnt === real) {
+			if (val !== amnt && val > -1) this.prevSetSize = val;
+			return;
+		}
+		const oldVal = this.size;
+		if (amnt < 0) {
+			const { headerSize, ratio, setMinSize, maxSize } = this;
+			if (setSize > -1) this.real = setSize;
+			else if (ratio === 0) this.real = Math.max(0, setMinSize, maxSize);
+			else this.real = Math.ceil(headerSize / ratio) + space;
+			this.autoData = true;
+			this.prevSetSize = -1;
+		} else {
+			this.real = amnt;
+			this.autoData = val === -1;
+			this.prevSetSize = val !== amnt ? val : -1;
+		}
+
+		if (this.real < this.minSize) this.real = 0;
+		if (this.maxFix) this.real = Math.min(this.real, this.maxSize);
+
+		if (oldVal === this.size) return;
+		if (!this.ratioEventCheck()) this.buildLines();
+		this.emit(Events.EventChangeSize, this);
+	}
+
+	/**
+	 * Get the size of the spacer or the total space that should be used
+	 * between header and content. (If header and content is aligned horizontally)
+	 * (.. header | content ) =>
+	 * (header|->|content), |->| = space.
+	 * Typically it is 2 x padding + border size. */
+	get spacer(): number {
+		return this.space;
+	}
+
+	/**
+	 * Get the space that the data in the column takes up.
+	 * This is same as size, unless ratio is used (header and content is horizontal).
+	 */
+	get spaceSize(): number {
+		if (this.ratio > 0) return this.size - this.space;
+		return this.size;
+	}
+
+	/** Get or set the size of the table. (excluding borders & Padding) */
+	get tableSize(): number {
+		return this.table;
+	}
+
+	set tableSize(val: number) {
+		const v = Math.max(val, -1);
+		if (v === this.table) return;
+		const max = this.maxSize;
+		this.table = v;
+		const { isPercent, autoData, size, maxFix, prevSetSize: prev, maxSize, setSize } = this;
+		if (!isPercent && !maxFix) return;
+		// notify if maxSize has changed
+		if (maxFix && max !== maxSize) this.emit(Events.EventChangeMax, this);
+
+		const maxsz = maxFix ? this.valueAdjuster(this.setMaxSize) : -1;
+		let sz = prev > -1 ? prev : autoData ? -1 : size;
+		let resetPrev = -1;
+		if (setSize > 0 && sz > 0) {
+			sz = setSize > maxsz && maxsz > -1 ? maxsz : setSize;
+			sz = prev > -1 && prev < sz ? 0 : sz;
+			resetPrev = prev === sz ? -1 : prev;
+		} else if (setSize === 0) sz = 0;
+		else if (maxFix && sz < 0) sz = maxsz;
+		this.size = maxFix ? Math.min(sz, Math.max(0, maxsz)) : sz;
+		this.prevSetSize = resetPrev;
+	}
+
+	// STATE ==================================================================
+	/**
+	 * Get a boolean value that indicate whether the current column has data.
+	 */
+	get hasContent(): boolean {
+		return this.dataMaxSize > 0;
+	}
+
+	/**
+	 * Get true if the column has a fixed size, else false.
+	 */
+	get isFixed(): boolean {
+		if (this.fixed === false) return false;
+		return (this.isPercent && this.table > -1) || (this.fixed && !this.isPercent);
+	}
+
+	/**
+	 * Get true if the size set on initialization is a fractional value (between 0 and 1),
+	 * else false.
+	 */
+	get isPercent(): boolean {
+		return this.setsize > 0 && this.setsize < 1;
+	}
+
+	// GENERAL ================================================================
+	/** Get the header lines array. */
+	get lines(): string[] {
+		if (this.lnes.length === 0 && this.printName !== '') this.buildLines();
+		return this.lnes;
+	}
+
+	/**
+	 * Get the internal name for the column.  (this name is only set on intialization) */
 	get name(): string {
 		return this.nme;
 	}
 
 	/**
-	 * The printable name for the column.
-	 * User set / initialize => may set max size and build new lines.
+	 * Get The order in which the column will appear in relation to other columns.
+	 * Returns 0 if no order has been set.
+	 */
+	get order(): number {
+		return this.ordr;
+	}
+
+	/**
+	 * Get or set the printable name for the column.
+	 * User set / initialize.  This value will appear as column header for the column.
 	 */
 	get printName(): string {
 		return this.prntName;
@@ -121,281 +526,7 @@ export class ColumnInfo extends EventEmitter {
 		}
 		this.buildLines(true);
 	}
-
-	/**
-	 * The order in which the column will appear in relation to other columns.
-	 * Returns 0 if no order has been set.
-	 * User set / initialize => nothing change on columnInfo.
-	 */
-	get order(): number {
-		return this.ordr;
-	}
-
-	set order(val: number) {
-		if (val === this.ordr) return;
-		this.ordr = Math.max(0, val);
-		this.emit(Events.EventChangeOrder, this);
-	}
-
-	/**
-	 * Get the maximum size of the current collumn (in total)
-	 * (include middle padding for ratio type data)
-	 * maxSize can only be set on initialization (maxSize option).
-	 */
-	get maxSize(): number {
-		if (this.isFixed) return this.size;
-		if (this.maxFix) {
-			if (this.setMaxSize === 0 || this.setMaxSize >= 1) return this.setMaxSize;
-			return this.setMaxSize * this.tableSize;
-		}
-		const dataMax = Math.max(this.dataMaxSize, this.externalMax, 0);
-		// can still be maxFix but without table size... return real values
-		return this.rat === 0
-			? Math.max(Math.max(dataMax, this.headerMaxSize), 0)
-			: Math.max(dataMax + this.headerMaxSize + this.space, 0);
-	}
-
-	/** Get the minimum size that the column can be.  Set at startup. */
-	get minSize(): number {
-		return Math.max(0, this.setMinSize);
-	}
-
-	/**
-	 * Get the actual maximum size of the header (data) (excluding padding)
-	 */
-	get maxHeader(): number {
-		return this.rat > 0 ? Math.max(this.headerMaxSize, this.externalHead) : this.headerMaxSize;
-	}
-
-	/**
-	 * get or set the actual maximum size of the content (data) (excluding padding)
-	 * inside the column.
-	 * This ignores maxHeader size.
-	 */
-	get maxContent(): number {
-		return Math.max(0, this.dataMaxSize, this.externalMax);
-	}
-
-	set maxContent(val: number) {
-		const oldDataMax = Math.max(this.dataMaxSize, this.externalMax, 0);
-		const oldMax = this.maxSize;
-		this.dataMaxSize = Math.max(this.dataMaxSize, val);
-		if (oldDataMax === Math.max(this.dataMaxSize, this.externalMax, 0)) return;
-		if (!this.maxFix && !this.isFixed && oldMax !== this.maxSize) {
-			this.emit(Events.EventChangeMax, this);
-		}
-		this.setRatio();
-		if (this.autoData) this.size = -1;
-		/* istanbul ignore else: no else */ else if (this.rat === 0) this.buildLines();
-	}
-
-	/**
-	 * Get or set a desired size of the (total) column
-	 * including padding but exclude any borders.
-	 */
-	get size(): number {
-		if (this.real >= 0) return this.real;
-		if (this.isPercent) {
-			if (this.tableSize >= 0) return this.setSize * this.tableSize;
-		} else if (this.isFixed) return this.setSize;
-
-		return Math.max(
-			this.setMinSize,
-			Math.max(this.dataMaxSize, this.headerMaxSize, this.externalMax),
-			0,
-		);
-	}
-
-	set size(val: number) {
-		// CAN BE:
-		// - size is alway 0 if val is 0
-		// - percentage (i.e. % on tablesize -> setSize = decimal value below 1)
-		//   ~ with out table size => Maxsize of content (audoData = true)  OR
-		//                            The real size that has been set to size
-		//      + if size was 0 and val > 0 => size will be val
-		//    ~ if tablesize is set => Math.ceil(tableSize & the percentage amnt)
-		//      + if size was 0 and val < setSize * tableSize => size remain 0.
-		//      + if size was 0 and val >= setSize * tableSize => size = setSize * tableSize.
-		//    ~ Fixed is automatically set if size is initilized with a size variable.
-		//    ~ setting fixed to false will result in size being set to any val provided:
-		//      + if val = -1 will reset size to setSize * tableSize
-		//  - ratio (i.e. size is contentSize + headerSize) => only relevant if val is < 0
-		//  - if fixed (i.e. setSize >= 1 || setSize === 0):
-		//    ~ if val === 0 || val < setSize => size = 0
-		//    ~ if val >= setSize => size = setSize
-		//    ~ if initialized as fixed without size option, setSize => printName on initialization.
-		//  - none of the above size = Math.max(0, val); [val limites to 0]
-		//  - size can never be smaller than minimumsize (else it will be 0)
-		//  - size can never be bigger than maximumsize (else it will be maxsize)
-		let amnt = Math.floor(val);
-		const { isPercent, isFixed, setSize, tableSize, real, autoData } = this;
-		if (setSize > 0 && isFixed && val !== 0) {
-			let testAmnt = -1;
-			if (isPercent && isFixed) testAmnt = Math.ceil(setSize * tableSize);
-			else testAmnt = setSize;
-			amnt = val < 0 ? testAmnt : testAmnt > val ? 0 : testAmnt;
-		}
-		const zero = real === 0 || amnt === 0 || autoData || isPercent;
-		if ((isFixed && !zero) || amnt === this.real) {
-			if (val !== amnt) this.prevSetSize = val;
-			return;
-		}
-		const oldVal = this.real;
-		if (amnt < 0) {
-			if (this.setSize > -1 && !isPercent) this.real = this.setSize;
-			else if (isPercent && this.tableSize > -1) {
-				this.real = Math.ceil(this.setSize * this.tableSize);
-			} else if (this.rat === 0) this.real = Math.max(0, this.setMinSize, this.maxSize);
-			else this.real = Math.floor(this.headerMaxSize / this.ratio) + this.space;
-			this.autoData = true;
-			this.prevSetSize = -1;
-		} else {
-			this.real = amnt;
-			this.autoData = isPercent && this.table < 0;
-			this.prevSetSize = val !== amnt ? val : -1;
-		}
-
-		if (this.real < this.minSize) this.real = 0;
-		if (this.maxFix) this.real = Math.min(this.real, this.maxSize);
-
-		if (oldVal === this.real) return;
-		this.buildLines();
-		this.emit(Events.EventChangeSize, this);
-	}
-
-	get spaceSize(): number {
-		if (this.ratio > 0) return this.size - this.space;
-		return this.size;
-	}
-
-	/**	Get the size of the header Column */
-	get headerSize(): number {
-		const {
-			size,
-			ratio,
-			autoData,
-			isFixed,
-			maxHeader,
-			space,
-			headerMaxSize,
-			dataMaxSize,
-			externalMax,
-		} = this;
-		if (size === 0 && !autoData) return 0;
-		if (ratio > 0) {
-			if (autoData && !isFixed) return maxHeader;
-			if (size - space < 1) return 0;
-			return Math.round((size - space) * ratio);
-		}
-		if ((size === -1 || autoData) && !isFixed) {
-			return Math.max(headerMaxSize, dataMaxSize, externalMax);
-		}
-		return size;
-	}
-
-	set headerExternal(val: number) {
-		this.externalHead = val < 0 ? 0 : val;
-	}
-
-	/** Get the size of the content column. */
-	get contentSize(): number {
-		const { size, ratio, rat, headerSize, autoData, isFixed, space, headerMaxSize } = this;
-		const dataMax = Math.max(0, this.dataMaxSize, this.externalMax);
-		if (size === 0 && !autoData) return 0;
-		if (ratio) {
-			if (headerSize === 0) return 0;
-			if (rat === 1 && autoData && !isFixed) {
-				return dataMax === 0 && headerSize > 0
-					? Math.ceil(headerSize / ratio - headerSize)
-					: dataMax;
-			}
-			return size - headerSize - space;
-		}
-		if (autoData) return Math.max(headerMaxSize, dataMax);
-		return size;
-	}
-
-	/**
-	 * The ratio of Header versus column space if the column is not displayed flat.
-	 * 0 = no ratio is set.
-	 * 1 = ratio is set, but to the actual values of the column (i.e. ratio is unknown)
-	 * all other values is the actual ratio.
-	 */
-	get ratio(): number {
-		return this.rat === 1 ? this.intRat : this.rat;
-	}
-
-	set ratio(val: number) {
-		if (val === this.rat || val < 0 || val > 1) return;
-		const { headerSize, contentSize } = this;
-		this.rat = val;
-		const content =
-			val > 0 && val < 1
-				? Math.floor(this.headerSize / val) - this.headerSize
-				: this.contentSize;
-		const changed = this.headerSize !== headerSize || content !== contentSize;
-		if (changed) this.emit(Events.EventChangeRatio, this);
-
-		if (this.autoData) this.size = -1;
-		if (changed) this.buildLines();
-	}
-
-	/** The size of the table in which collumn will appear (excluding borders & Padding) */
-	get tableSize(): number {
-		return this.table;
-	}
-
-	set tableSize(val: number) {
-		const v = Math.max(val, -1);
-		if (v === this.table) return;
-		const max = this.maxSize;
-		const old = this.table;
-		this.table = v;
-		const max2 = this.maxSize;
-		if (this.maxFix && max !== max2) this.emit(Events.EventChangeMax, this);
-		const { isPercent, autoData, size, maxFix, prevSetSize: prev } = this;
-		if (!isPercent && !maxFix) return;
-		/* istanbul ignore next: ? -1 not hit */
-		/**
-		 * Size should change on the following occurences:
-		 * - if the max size is smaller than the actual size (size is always limited to max)
-		 * - autoData is set (i.e. flexible size value).  isPercentage = true
-		 * - If size is not set, but column is percentage and fixed and previous value was set
-		 *      i.e. we are using the tableSize x fraction on previous occasion
-		 * - If a previous set value (coult not initialize then as table size was too small) is active
-		 * - it is not a fixed column
-		 */
-		if (size > max2) this.size = isPercent ? -1 : max2;
-		// if isPercent = true, we don't have size that rely on tablesize
-		if (!isPercent) return;
-		const table = Math.ceil(this.tableSize * this.setSize);
-		let setSize = this.tableSize < 0 || autoData ? -1 : table;
-		if (prev > -1 && old > -1) {
-			setSize = this.tableSize > -1 ? (prev >= table ? table : 0) : prev;
-		}
-		this.size = setSize;
-	}
-
-	/** Get the header lines array. */
-	get lines(): string[] {
-		if (this.lnes.length === 0 && this.printName !== '') this.buildLines();
-		return this.lnes;
-	}
-
-	/** Get the size of the spacer */
-	get spacer(): number {
-		return this.space;
-	}
-
-	/** Alignment of the content.  Set at initialization. */
-	readonly align: Alignment;
-
-	/** Alignment of the header.  Set at initialization. */
-	readonly headAlign: Alignment;
-
-	/** Get a bollean that if true the sizes for the current column is fixed. */
-	private fixed?: boolean;
-	// #endregion public properties and variables
+	// #endregion properties
 
 	/**
 	 * A class to keep column information in.
@@ -403,96 +534,164 @@ export class ColumnInfo extends EventEmitter {
 	 */
 	constructor(options: colOptions) {
 		super();
-		if (!options.name) throw new Error('options must include a valid name variable');
-		this.nme = options.name.toString();
+		const { name, tabSize, eLevel, align, headAlign, excludeHeader, padding } = options;
+		const { borderSize, tableSize, size, fixed, minSize, maxSize } = options;
+		const { pattern, printName, order } = options;
+		if (!name) throw new Error('options must include a valid name variable');
+
+		this.nme = name.toString();
 		// character / display properties
-		this.tabSize = options.tabSize || 2;
-		this.eLevel = options.eLevel || emojiLevel.all;
+		this.tabSize = tabSize || 2;
+		this.eLevel = eLevel || emojiLevel.all;
 		// alignment
-		this.align = options.align != null ? options.align : Alignment.left;
-		this.headAlign = options.headAlign != null ? options.headAlign : this.align;
+		this.align = align != null ? align : Alignment.left;
+		this.headAlign = headAlign != null ? headAlign : this.align;
+		this.excludeHead = excludeHeader === true;
 
 		// size related properties
-		this.changeSpace(options.padding, options.borderSize);
-		this.table = options.tableSize || -1;
-		if (options.size != null) {
-			this.setSize = options.size;
-			this.fixed = options.fixed == null || options.fixed;
-			if (!this.isPercent || this.setSize === 0) this.real = this.setSize;
-		} else if (options.fixed != null) this.fixed = options.fixed;
-		if (!this.setSize) this.setSize = -1;
-		this.setMinSize = options.minSize != null && options.minSize >= 0 ? options.minSize : 0;
-		if (this.setMinSize > 0 && this.setMinSize !== this.setSize && options.fixed == null) {
-			this.fixed = false;
-		}
-		if (options.maxSize >= 0) this.setMaxSize = options.maxSize;
-		else this.setMaxSize = -1;
+		this.changeSpace(padding, borderSize);
+		this.table = tableSize || -1;
+		if (size != null) {
+			this.setsize = size;
+			this.fixed = fixed == null || fixed;
+		} else if (fixed != null) this.fixed = fixed;
+		if (this.setsize == null) this.setsize = -1;
+		this.setMinSize =
+			minSize != null && minSize >= 0 ? (this.setsize >= 1 ? this.setsize : minSize) : 0;
+
+		this.setMaxSize =
+			maxSize >= 0
+				? maxSize < 1
+					? maxSize
+					: Math.max(maxSize, this.minSize)
+				: (this.setMaxSize = -1);
 
 		// value related properties
-		this.pattern = options.pattern != null ? options.pattern : 'col-~D';
-		if (options.printName) this.printName = options.printName;
+		this.pattern = pattern != null ? pattern : 'col-~D';
+		if (printName) this.printName = printName;
 		else {
 			this.printName =
 				isNum(this.nme) && this.pattern ? this.pattern.replace(/~D/g, this.nme) : this.nme;
 		}
 		// order related properties
-		this.ordr = options.order ? (options.order <= 0 ? 0 : options.order) : 0;
+		this.ordr = order ? (order <= 0 ? 0 : order) : 0;
 
 		// initialize
-		if (this.setSize === -1 && this.isFixed) {
-			this.setSize = getStringSize(this.printName).size;
+		if (this.setsize < 0 && this.isFixed) {
+			this.setsize = getStringSize(this.printName).size;
 		}
 		this.size = -1;
 	}
 
-	// #region private functions ----------------------------------------------
+	// #region private functions
 	/**
-	 * Method to ensure that the ratios correctly reflect the data (if auto)
+	 * The main function responsible for building lines
+	 * for the header component.
+	 * @param {boolean} force Will force a rebuild of the data if true
+	 * regardless of if it is needed or not. (Default = false)
 	 */
-	private setRatio(): void {
-		const { ratio: rat, headerSize: header, headerMaxSize } = this;
-		const dataMax = Math.max(this.dataMaxSize, this.externalMax, -1);
-		if (dataMax <= 0) this.intRat = 0.5;
-		else {
-			this.intRat = headerMaxSize / (headerMaxSize + dataMax);
-			this.intRat = Math.min(0.85, Math.max(0.15, this.intRat));
-		}
-		// notify
-		if (rat !== this.ratio) this.emit(Events.EventChangeRatio, this);
-		if (header !== this.headerSize) this.buildLines();
-	}
-
-	/** build the header lines if needs be. */
 	private buildLines(force = false): void {
-		const size = this.rat > 0 ? this.headerSize : this.size;
-		if (!force && size === this.prevSize) return;
-		let changed = false;
+		const { headerSize, prevSize, printName, eLevel, lnes, rat } = this;
+		const size = rat > 0 ? headerSize : this.size;
+		if (!force && size === prevSize) return;
 		this.prevSize = size;
 
-		const lines: string[] = fillLine(
-			getStringLines(this.printName, size, this.eLevel),
-			this,
-			true,
-		);
+		const lines: string[] = fillLine(getStringLines(printName, size, eLevel), this, true);
+		if (arrayMatch(lines, lnes)) return;
 
-		if (lines.length !== this.lnes.length) changed = true;
-		/* istanbul ignore else: no else */ else if (lines.length > 0) {
-			for (let i = 0, len = lines.length; i < len; i++) {
-				if (this.lnes[i] !== lines[i]) {
-					changed = true;
-					i = len;
-				}
-			}
-		}
-		if (!changed) return;
 		this.lnes = lines;
 		this.emit(Events.EventChangeLines, this);
 	}
-	// #endregion private functions -------------------------------------------
 
-	// #region public functions -----------------------------------------------
 	/**
-	 * Reset the external data max size for the column.
+	 * A method that is called after size and ratio changes has occured.
+	 * It ensures that ratio and size events are called in correct order,
+	 * and only once.
+	 */
+	private ratioEventCheck(): boolean {
+		if (!this.ratioEvnt.isRatio) return false;
+		const { headerSize: newH, contentSize: newC } = this;
+		const { content, head } = this.ratioEvnt;
+		if (newH !== head || newC !== content) this.emit(Events.EventChangeRatio, this);
+		this.ratioEvnt = {
+			isRatio: false,
+			content: -1,
+			head: -1,
+		};
+		if (newH === head) return false;
+		this.buildLines();
+		return true;
+	}
+
+	/**
+	 * Main function responsible for determining the internal ratio
+	 * of header size vs content size.
+	 */
+	private setRatio(): void {
+		const { ratio: rat, headerMaxSize: header, headerSize: oldHead, table } = this;
+		const dataMax = this.maxContent;
+		if (dataMax <= 0) this.intRat = 0.5;
+		else {
+			const head = table > 0 ? Math.min(table, header) : header;
+			const content = table > 0 ? Math.min(dataMax, table) : dataMax;
+			this.intRat = head / (head + content);
+		}
+		// notify
+		if (rat !== this.ratio) this.emit(Events.EventChangeRatio, this);
+		if (oldHead !== this.headerSize) this.buildLines();
+	}
+
+	/**
+	 * Returns the true value of the column based on a given max / set size value.
+	 * The true value will include TableSize if needs be
+	 * (i.e. return val x tablesize when val is less than 1 and more than 0).
+	 * @param val The set maxSize or setSize values of the column.
+	 */
+	private valueAdjuster(val: number): number {
+		if (val <= 0) return val;
+		const { tableSize, ratio } = this;
+		const TS = tableSize;
+
+		return ratio > 0 && TS >= 0 ? TS : val >= 1 ? val : TS < 1 ? TS : Math.round(TS * val);
+	}
+
+	// #endregion private functions
+
+	// #region public functions ===============================================
+	/**
+	 * Set the horizontal spacing between the header column and content column.
+	 * @param padding The required horizontal padding vor this column. (Default = 2)
+	 * @param vBorderSpace The required space a vertical border takes up. (Default = 0)
+	 */
+	changeSpace(padding = 2, vBorderSpace = 0): void {
+		const size = Math.max(padding, 0) * 2 + Math.max(vBorderSpace, 0);
+		const { space, maxSize, autoData, rat } = this;
+		if (size === space) return;
+		this.space = size;
+		if (rat === 0) return;
+		/* istanbul ignore else: no else */
+		if (maxSize !== this.maxSize) this.emit(Events.EventChangeMax, this);
+		if (autoData) this.size = -1;
+		else this.buildLines();
+	}
+
+	/**
+	 * Gracefull function to set the size of the column without
+	 * changing the autoData preset.  Where normally the autoData
+	 * property will be forced false when setting the size property,
+	 * this function will reset autoData to value that was set before size change.
+	 * @param val The new size to set on the column.
+	 * @param fixed Whether the size is fixed or not.
+	 */
+	internalSizeChange(val: number, fixed = false): void {
+		const { autoData } = this;
+		if (!autoData && val === -1) return;
+		this.size = val;
+		this.autoData = !fixed ? autoData : false;
+	}
+
+	/**
+	 * Resets the external data max size for the column.
 	 */
 	reset(): void {
 		this.externalMax = -1;
@@ -503,36 +702,20 @@ export class ColumnInfo extends EventEmitter {
 	 * Resets the internal maxContent value.
 	 */
 	resetContent(): void {
+		if (this.dataMaxSize <= 0) return;
 		this.dataMaxSize = 0;
 		this.setRatio();
+		this.buildLines();
 	}
 
 	/**
-	 * Set the horizontal spacing between the header column and content column.
-	 * User changing the size of the spacign between columns.
-	 * @param padding The required horizontal padding vor this column.
-	 * @param vBorderSpace The required space a vertical border takes up.
+	 * Set the maximum content size and fixed sizes for the bounded column.
+	 * Bounded column is a column that share the same space in the table.
+	 * I.e. if 'Col1' share the space with index '0' then columns for '0'
+	 * and 'Col1' is shared (same column index).
+	 * @param val The value of the maximum content of the bounded column.
+	 * @param fixedSize Any fixed sizes that is used by the bounded column.
 	 */
-	changeSpace(padding = 2, vBorderSpace = 0): void {
-		const size = Math.max(padding, 0) * 2 + Math.max(vBorderSpace, 0);
-		if (size === this.space) return;
-		const max = this.maxSize;
-		this.space = size;
-		if (this.rat === 0) return;
-		// size change and maxsize change
-		/* istanbul ignore else: no else */
-		if (max !== this.maxSize) this.emit(Events.EventChangeMax, this);
-		if (this.autoData) this.size = -1;
-		else this.buildLines();
-	}
-
-	internalSizeChange(val: number, fixed = false): void {
-		if (!this.autoData && val === -1) return;
-		const { autoData } = this;
-		this.size = val;
-		this.autoData = !fixed ? autoData : false;
-	}
-
 	setExternalMax(val: number, fixedSize = -1): void {
 		if (val === this.externalMax && fixedSize === -1) return;
 		const { maxSize: oldMax, maxFix, isFixed, autoData } = this;
@@ -544,7 +727,6 @@ export class ColumnInfo extends EventEmitter {
 		if (fixedSize > -1) this.internalSizeChange(fixedSize, true);
 		else if (autoData) this.size = -1;
 	}
-
 	// #endregion public functions
 }
 
@@ -559,4 +741,5 @@ export type colOptions = columnProperty & {
 	tabSize?: number;
 	tableSize?: number;
 	pattern?: string;
+	excludeHeader?: boolean;
 };

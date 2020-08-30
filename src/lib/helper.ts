@@ -288,12 +288,9 @@ export function fillLine(data: string[], colSize: IColumnSize, header = false): 
 	if (!data || data.length === 0) return [];
 	if (colSize == null) return data;
 	const result: string[] = [];
-	const workSize = colSize.ratio
-		? header
-			? colSize.headerSize
-			: colSize.contentSize
-		: colSize.size;
-	const align = header ? colSize.headAlign : colSize.align;
+	const { ratio, headerSize, contentSize, size, headAlign, align, tabSize, eLevel } = colSize;
+	const workSize = ratio ? (header ? headerSize : contentSize) : size;
+	const alignment = header ? headAlign : align;
 
 	const split = (diff: number, lne: string): string => {
 		const left = Math.floor(diff / 2);
@@ -301,12 +298,12 @@ export function fillLine(data: string[], colSize: IColumnSize, header = false): 
 	};
 
 	data.forEach(line => {
-		let size = getStringSize(line, colSize.tabSize, colSize.eLevel);
+		let sizeObj = getStringSize(line, tabSize, eLevel);
 		let current = line;
-		if (size.size === workSize) current = line;
-		else if (size.size < workSize) {
-			const diff = workSize - size.size;
-			switch (align) {
+		if (sizeObj.size === workSize) current = line;
+		else if (sizeObj.size < workSize) {
+			const diff = workSize - sizeObj.size;
+			switch (alignment) {
 				case Alignment.center:
 					current = split(diff, current);
 					break;
@@ -318,11 +315,11 @@ export function fillLine(data: string[], colSize: IColumnSize, header = false): 
 					break;
 			}
 		} else {
-			size = getStringSize(line.slice(0, -1), colSize.tabSize, colSize.eLevel);
-			while (size.size > 0 && size.size > workSize) {
-				size = getStringSize(size.val.slice(0, -1), colSize.tabSize, colSize.eLevel);
+			sizeObj = getStringSize(line.slice(0, -1), tabSize, eLevel);
+			while (sizeObj.size > 0 && sizeObj.size > workSize) {
+				sizeObj = getStringSize(sizeObj.val.slice(0, -1), tabSize, eLevel);
 			}
-			current = size.val;
+			current = sizeObj.val;
 		}
 		if (current.trim()) result.push(current);
 	});
@@ -340,6 +337,22 @@ export function isNum(val: unknown): boolean {
 export function addSpecialEmo(emo: string | string[]): void {
 	if (Array.isArray(emo)) specialEmo.push(...emo);
 	else specialEmo.push(emo);
+}
+
+export function arrayMatch(array1: unknown[], array2: unknown[]): boolean {
+	if (!array1 || !array2 || !Array.isArray(array1) || !Array.isArray(array2)) return false;
+	if (array1.length !== array2.length) return false;
+	for (let i = 0, len = array1.length; i < len; i++) {
+		const arr1Type = typeof array1[i];
+		const arr2Type = typeof array2[i];
+
+		if (arr1Type !== arr2Type) return false;
+		if (arr1Type === 'object') {
+			if (JSON.stringify(array1[i]) !== JSON.stringify(array2[i])) return false;
+		} else if (array1[i] !== array2[i]) return false;
+	}
+
+	return true;
 }
 
 export type stringSize = {

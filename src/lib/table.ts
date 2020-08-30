@@ -1,7 +1,9 @@
 import { BordersExtended, templates, borders as boksBorders, getBorder } from 'boks';
+import readline from 'readline';
 import * as Events from './events';
 import { BaseData } from './baseData';
 import { ColumnData } from './columnData';
+
 // eslint-disable-next-line object-curly-newline
 import {
 	Options,
@@ -18,162 +20,313 @@ import { ColumnInfo, colOptions } from './columnInfo';
 import { fillSpace, isNum, getStringSize, fillLine } from './helper';
 import { CombinedInfo } from './combinedInfo';
 
+const states = {
+	NONE: 0,
+	ADDDATA: 1,
+	ADDROW: 2,
+	SETRATIO: 4,
+	BUILDHEADER: 8,
+};
+
+const actions = {
+	NONE: 0,
+	RESIZE: 1,
+	HEADER: 2,
+};
+
 export class Table extends BaseData {
 	// #region variables
 	// DATA -------------------------------------------------------------------
 	// --> ARRAY values  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-	private rawData: rawDataObject[] = [];
-
-	private newData: rawDataObject[] = [];
-
-	private newLines: lineObjects[] = [];
-
+	/**
+	 * Lines that has been included in the output values.
+	 */
 	private lnes: lineObjects[] = [];
 
+	/**
+	 * Newly accepted data that has not yet been parsed to lines.
+	 * If parsed it will be moved to rawData
+	 */
+	private newData: rawDataObject[] = [];
+
+	/**
+	 * New lines that has been parsed from newData,
+	 * but not yet included in output values.
+	 */
+	private newLines: lineObjects[] = [];
+
+	/** The raw data which has already been parsed to lines (per column) */
+	private rawData: rawDataObject[] = [];
+
 	// --> COLUMN values xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-	/**	A quick reference to all possible column names (can be index numbers too) */
-	private keys: string[] = [];
-
-	/** an object storing all the column information */
-	cols: colProperties = {};
-
-	private combined: { [key: string]: CombinedInfo } = {};
-
-	sortedCols: CombinedInfo[] = [];
-
+	/**
+	 * Readonly variable containing alignment preference for the col data.
+	 * @readonly
+	 */
 	private readonly colAlign: Alignment;
 
+	/**
+	 * Readonly variable containing alignment preference for the header data.
+	 * @readonly
+	 */
 	private readonly colHeadAlign: Alignment;
 
-	// --> STRING values xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-	// The current value or value of the table.
-	private val = '';
-
-	// The old value of the table
-	private oldVal = '';
-
-	private newLineString = '';
-
-	/** The header string if any. */
-	private head: false | string = '';
-
-	private get header(): string | false {
-		if (this.head === false || !this.flatten) {
-			const border = this.buildBorder(this.borders.content, 0);
-			if (border) return `${border}\n`;
-			if (!this.flatten) return '';
-		}
-		return this.head;
-	}
-
-	private set header(val: string | false) {
-		this.head = val;
-	}
-
-	private oldHeader: false | string = '';
-
-	/**	The row separator (border) */
-	private separator = '';
-
-	/** The bottom Border. */
-	private bottomBorder = '';
-
+	/**
+	 * A readonly variable containing the column Pattern that should be used for numbered columns.
+	 * columnPattern should have a ~D value in the string to indicate where the number
+	 * should be placed if any.
+	 * @readonly
+	 * @default col-~D
+	 */
 	private readonly columnPattern: string;
 
-	private pad = '';
+	/**
+	 * An object containing the information regarding all columns.
+	 * @public
+	 */
+	cols: colProperties = {};
+
+	/**
+	 * The combinedSet of column informations.
+	 * This combined unnamed columns with named columns.
+	 */
+	private combined: { [key: string]: CombinedInfo } = {};
+
+	/**
+	 * A quick reference to all column names as it will appear during print.
+	 * Note that numbered collums will be an empty string.
+	 */
+	private keys: string[] = [];
+
+	/**
+	 * An sorted array of the combined columns.
+	 * @public
+	 */
+	sortedCols: CombinedInfo[] = [];
+
+	// --> STRING values xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+	/**
+	 * If value is a string it represents the header string.
+	 * Else it could only be false indicating that no header should be printed.
+	 */
+	private head: false | string = '';
+
+	/**
+	 * Variable storing the last printed header.  Mostly used with streams
+	 * and indicate if a total reprint of the table is required (if table has changed).
+	 */
+	private oldHeader: false | string = '';
+
+	/**
+	 * A stored variable contaning the 'value' which was already printed to the console.
+	 * This variable is used if stream is true and to keep track of lines to remove.
+	 */
+	private oldVal = '';
+
+	/** A string variable of empty spaces to the same size of a padding unit. */
+	private padString = '';
+
+	/**
+	 * The current value of all the rows in the table concatenated to a string.
+	 */
+	private val = '';
 
 	// BORDERS ----------------------------------------------------------------
-	/** the borders that should be used for the table */
-	borders: combinedBorders = {
+	/**
+	 * the borders that should be used for the table
+	 * @readonly
+	 */
+	readonly borders: combinedBorders = {
 		content: false,
 		header: false,
 	};
 
-	/** the size of the horizontal border (if any).  Consider both header & content border. */
-	private vBorder = 0;
+	/** The bottom Border. */
+	private bottomBorder = '';
 
-	/** the size of the left border (if any).  Consider both header & content border. */
+	/**
+	 * A variable storing the the size of the left most border (if any).
+	 * It Consider both header & content border.
+	 */
 	private lBorder = 0;
 
-	/** the size of the right border (if any).  Consider both header & content border */
+	/**
+	 * A variable storing the size of the right most border (if any).
+	 * It Consider both header & content border.
+	 */
 	private rBorder = 0;
 
-	// size -------------------------------------------------------------------
-	/** the maximum size of the table */
-	private readonly maxsize: number;
+	/**
+	 * The row separator border.
+	 */
+	private separator = '';
 
-	/** The margin (start spacing) for the table */
+	/**
+	 * A variable storing the size of the horizontal border (if any).
+	 * It Considers both header & content borders.
+	 */
+	private vBorder = 0;
+
+	// size -------------------------------------------------------------------
+	/**
+	 * A stored value for the largest contentsize of all the columns combined.
+	 * Mostly used in cases where the table is not flat (i.e. header | data => horizontal flow)
+	 */
+	private contMax = 0;
+
+	/**
+	 * A readonly variable if true, will fill all the columns to fit the maximum table size.
+	 * Maximum table size will be the initial set maximum size, or the set size.
+	 * If false, columns will wrap the content, and table size could be less than the size given.
+	 * @default false
+	 * @readonly
+	 */
+	private readonly fill: boolean;
+
+	/**
+	 * A stored value for the largest header size of all the columns combined.
+	 * Mostly used in cases where the table is not flat (i.e. header | data => horizontal flow)
+	 */
+	private headMx = 0;
+
+	/**
+	 * A readonly variable storing the margin size.
+	 * Margin size is the spacing on the left of the entire table.
+	 * @readonly
+	 */
 	private readonly margin: number;
 
-	/**	The padding (spacing) that each column should have */
+	/**
+	 * The size for the padding of each collumn.
+	 * Padding is the spacing between the Vertical border and the content.
+	 */
 	private padSize = 0;
 
-	/** the tabsizing that should be used when \t characters is used. */
+	/**
+	 * Indicate the ratio that is used if table is not flat (i.e. header | data => horizontal flow
+	 * If ratio is 0, it means that header will be ontop and data below => vertical flow.
+	 * If more than 1 data rows exist, ratio will cahnge to 0.
+	 * @default 1
+	 */
+	private rat = 1;
+
+	/**
+	 * A readonly variable storing the size a tab character will have.
+	 * @default 2
+	 * @readonly
+	 */
 	private readonly tabsize: number;
 
 	// DEPTH ------------------------------------------------------------------
-	/** the maximum depth level */
+	/**
+	 * A readonly number variable indicating the maximum depth the data could traverse
+	 * @default 3
+	 * @readonly
+	 */
 	private readonly maxdepth: number;
-
-	/** the current depth of the table */
-	private deep = 1;
 
 	// STATE ------------------------------------------------------------------
 	/**
-	 * set at initialization.
-	 * If true, each property in object will represent a column.
-	 * If false, each property in object will represent a row (key|value pairs).
+	 * Indicate what action needs to be taken.
+	 * this is a bitwise number.
+	 */
+	private action = actions.NONE;
+
+	/**
+	 * If true will include all rows supplied (result in empty rows),
+	 * else will only include rows that has data inside.
+	 * @default false
+	 */
+	private all = false;
+
+	/**
+	 * If true new columns can be added later, else the columns are fixed to the intial set.
+	 * The initial set could either be the initial data received or columns received.
+	 * If no data or column information is received during construction of table, this will be true.
+	 * @default true
+	 * @readonly
+	 */
+	private readonly canGrow: boolean = true;
+
+	/**
+	 * A readonly variable:
+	 * If true, columns will be aligned horizontally next to each other.
+	 * If false, columns will be aligned vertically below each other.
 	 */
 	private readonly flat: boolean;
 
-	/** indicate if the rawdata was an array that was passed */
-	private arrayInitial = false;
-
-	/** True if the total size should be fixed. */
-	private fixed = false;
-
-	private valueReset = false;
+	readonly isTable = true;
 
 	/**
-	 * Indicate if this object receive information continuously ('true') or once off ('false').
-	 * @default false
+	 * Indicate a fluid state of the table.
+	 * This is a bitwise number.
 	 */
-	private streaming = false;
+	private state = states.NONE;
 
-	/** If true new columns can be added later, else the columns are fixed. */
-	private canGrow = true;
+	/**
+	 * If true the table will print and store information to continously receive data.
+	 * Else the data will be reprinted completely on each run.
+	 * @default false
+	 * @readonly
+	 */
+	private readonly streaming: boolean;
 
-	private buildingHeader = false;
+	/**
+	 * A variable mostly used during streaming and
+	 * if true, indicates that the table should be completely reprinted
+	 */
+	private valueReset = false;
 
 	// OPTIONS ---------------------------------------------------------------
-	private nextOption: Options = {
-		eLevel: emojiLevel.all,
-		padding: 1,
-		excludeHeader: true,
-		margin: 0,
-		flatten: true,
-		stream: false,
-	};
-
+	/**
+	 * A readonly emojiLevel variable to use when calculating string sizes.
+	 * @readonly
+	 */
 	private readonly eLevel: emojiLevel;
 
+	/**
+	 * The options that should be set on data of the next depth.
+	 * (i.e. columns that has objects as value)
+	 */
+	private nextOption: Options[];
 	// #endregion variables
 
 	// #region  properties
-	/**	Get the Vertical border for the Header. */
-	private get headerVBorder(): string {
-		let border = '';
-		if (this.borders.header) {
-			border = this.flatten
-				? this.borders.header.vertical || ''
-				: this.borders.header.right || this.borders.header.vertical || '';
-		}
-		if (!border && !this.flatten) {
-			border = this.borders.content ? this.borders.content.left || '' : '';
-		}
-		return this.fixBorderSpace(border, this.vBorder);
+	// HEADER PROPERTIES ========
+	/**
+	 * Get or set the header element, and should be prefered over calling head variable.
+	 * If a string is returned it represents the value for the header component.
+	 * Else false will be returned indicating that no header should be printed.
+	 */
+	private get header(): string | false {
+		if (this.head !== false && this.isFlat) return this.head;
+		const border = this.buildBorder(this.borders.content, 0);
+		if (border) return `${border}\n`;
+		return '';
 	}
 
+	private set header(val: string | false) {
+		/* istanbul ignore if: if not run in tests - safety. */
+		if (this.head === false) return;
+		this.head = val;
+	}
+
+	/** Get or Set the size of the largest header in the Table. */
+	private get headMax(): number {
+		return this.headMx;
+	}
+
+	private set headMax(val: number) {
+		const v = Math.max(val, 0);
+		this.headMx = v;
+		this.sortedCols.forEach(col => {
+			const c = col;
+			c.headerExternal = v;
+		});
+	}
+
+	// BORDER PROPERTIES =====
+	/** Get the Vertical border for the content section. */
 	private get contentVBorder(): string {
 		return this.fixBorderSpace(
 			this.borders.content ? this.borders.content.vertical || '' : '',
@@ -181,97 +334,209 @@ export class Table extends BaseData {
 		);
 	}
 
-	get value(): string {
-		const val = this.getValue();
-		return (this.streaming && !this.valueReset ? this.val : '') + val + this.bottomBorder;
-	}
-
-	get isTable(): boolean {
-		return true;
-	}
-
-	get maxData(): number {
-		let max = 0;
-		const spacer = this.padding * 2 + this.vBorder;
-		this.sortedCols.forEach((combined, idx) => {
-			const current = combined.maxSize;
-			if (current > 0) {
-				if (this.flatten) {
-					if (idx > 0) max += spacer;
-					max += current;
-				} else max = Math.max(max, current);
-			}
-		});
-
-		return max;
-	}
-
-	/** Returns the maximum table size excluding outerborder and margin */
-	get space(): number {
-		if (this.setSize === 0) return 0;
-		const ignore = this.margin + this.lBorder + this.rBorder + this.padding * 2;
-		if (this.setSize > 0) {
-			return this.setSize - (this.setSize - ignore > 0 ? ignore : 0);
+	/**	Get the Vertical border for the Header section. */
+	private get headerVBorder(): string {
+		let border = '';
+		const { borders, isFlat: flat, vBorder } = this;
+		const { header, content, headPure: headerPure } = borders;
+		const head = flat || headerPure === false ? header : headerPure || header;
+		if (head) {
+			border = head.vertical;
+			if (!border && !flat) border = head.right || '';
 		}
-		if (this.maxsize > 0) {
-			return this.maxsize - (this.maxsize - ignore > 0 ? ignore : 0);
-		}
-		const size = this.maxData;
-		const len = this.keys.length;
-		if (size > 0) return size + (this.padding * 2 + this.vBorder) * (len - 1);
-		return Math.max(size, -1);
+		if (!border && !flat && content) border = content.left || '';
+		return this.fixBorderSpace(border, vBorder);
 	}
 
+	// OUTPUT ==========
 	/**
-	 * Get the column alignment: if true if the columns should show horizontally;
-	 * if false the columns will show vertically.
+	 * Get an Array of lines (string values) for each row.
 	 */
-	get flatten(): boolean {
-		if (!this.flat && this.rawData.length + this.newData.length <= 1) return false;
-		return true;
-	}
-
 	get lines(): string[] {
-		if (this.newData.length > 0) this.buildLines();
-		return [...this.lnes, ...this.newLines].reduce(
+		if (this.action & actions.RESIZE || this.newData.length > 0) this.buildLines();
+		const lines = [...this.lnes, ...this.newLines].reduce(
 			(val: string[], current: lineObjects): string[] => {
 				val.push(...current.value);
 				return val;
 			},
 			[],
 		);
+		if (lines.length > 0 && this.head && this.deep > 1) {
+			const head = this.head.split('\n');
+			lines.unshift(...head);
+		}
+		return lines;
 	}
 
-	// get or set the padding space in the columns.
+	/**
+	 * Get the string value of the table.
+	 * @public
+	 */
+	get value(): string {
+		this.getValue();
+		const { header, oldVal, bottomBorder, val, valueReset } = this;
+		return (valueReset ? header + val : oldVal) + bottomBorder;
+	}
+
+	// SIZE RELATED PROPERTIES =====
+	/** Get the Maximum size (width) of the data (either added together, or stacked). */
+	get maxData(): number {
+		const { isFlat: flat, padding, vBorder } = this;
+		const spacer = padding * 2 + vBorder;
+		if (flat) {
+			return this.sortedCols.reduce((max, combined, idx) => {
+				const { maxSize: current } = combined;
+				/* istanbul ignore if: should never be run - safety */
+				if (current <= 0) return max;
+				return max + current + (idx > 0 ? spacer : 0);
+			}, 0);
+		}
+		const { headMx, contMax } = this;
+		if (headMx === 0 && contMax === 0) return 0;
+		return Math.max(headMx, 1) + Math.max(contMax, 1) + spacer;
+	}
+
+	/**
+	 * Get or set the padding inside the table.
+	 * Padding is between the border and the content.
+	 */
 	get padding(): number {
 		return this.padSize;
 	}
 
 	set padding(val: number) {
-		if (val !== this.padSize) {
-			this.padSize = Math.max(0, val);
-			const keys = Object.keys(this.cols);
-			this.pad = fillSpace(this.padSize);
-			keys.forEach(key => this.cols[key].changeSpace(this.padSize, this.vBorder));
-		}
+		if (val === this.padSize) return;
+		this.padSize = Math.max(0, val);
+		this.padString = fillSpace(this.padSize);
+		// fix current values
+		const keys = Object.keys(this.cols);
+		keys.forEach(key => this.cols[key].changeSpace(this.padSize, this.vBorder));
+		this.colChanged();
+		this.action |= actions.RESIZE + actions.HEADER;
 	}
 
+	/**
+	 * Get or set the Ratio in which header and columns should appear.
+	 * This is only used if header - column flow is horizontal (not flat) [ header | data ]
+	 */
+	private get ratio(): number {
+		return this.rat;
+	}
+
+	private set ratio(val: number) {
+		const v = Math.max(0, val);
+		if (this.rat === v || v > 1) return;
+		const { rat: old } = this;
+		this.rat = val;
+
+		this.sortedCols.forEach(col => {
+			const c = col;
+			c.ratio = this.rat;
+		});
+		/**
+		 * only change in extreme case... else will be changed through events if needed
+		 * and through above itteration.
+		 */
+		if ((v > 0 && old === 0) || (v === 0 && old > 0)) this.colChanged();
+	}
+
+	/**
+	 * Get a value by which the size of the table should be reduced by to get to a printable
+	 * size.  This therefore exclud margin, outer borders and outer paddings.
+	 */
+	protected get sizeAdjuster(): number {
+		return this.deep === 1 ? this.margin + this.lBorder + this.rBorder + this.padding * 2 : 0;
+	}
+
+	/**
+	 * Get the space available for the content of the table.
+	 * This excludes margin, outer borders and outer paddings.
+	 */
+	get space(): number {
+		const { setSize, sizeAdjuster, maxsize } = this;
+		if (setSize === 0) return 0;
+		const ignore = sizeAdjuster;
+		if (setSize > 0 || maxsize < 0) {
+			let { size } = this;
+			size -= size > ignore ? ignore : size;
+			return size;
+		}
+		// remove outer paddings from maxsize variable (setSize === -1)
+		const max = maxsize <= ignore ? 0 : maxsize - ignore;
+
+		if (!this.isFlat) return max;
+		const { vBorder, padding } = this;
+		let size = 0;
+		let perc = 0;
+		let percMax = 0;
+		let cntr = -1;
+		this.sortedCols.forEach(col => {
+			const { maxContent, maxHeader, setsize } = col;
+			const sz = Math.max(maxContent, maxHeader, 0);
+			if (setsize > 0 && setsize < 1) {
+				perc += setsize;
+				percMax += sz;
+			} else size += sz;
+			cntr++;
+		});
+		if (perc && perc < 1) {
+			const percSz = size / (1 - perc) - size;
+			if (percSz < percMax) size = Math.floor(percMax / perc);
+			else size += Math.floor(percSz);
+		}
+		return Math.min(max, size + Math.max(0, cntr) * (padding * 2 + vBorder));
+	}
+
+	// GENERAL PROPERTIES =====
+	/**
+	 * Get or Set whether empty rows should be printed.
+	 * If true, empty rows will be printed, else all empty rows will not be printed.
+	 * @default false
+	 */
+	get inclusive(): boolean {
+		return this.all == null ? false : this.all;
+	}
+
+	set inclusive(val: boolean) {
+		if (val === this.all) return;
+		this.all = val;
+		this.redoData();
+	}
+
+	/**
+	 * Get the column alignment style:
+	 * if true the columns should show horizontally [col 1 | col 2 ...];
+	 * else the columns should show vertically [ col 1 | data for col 1 ].
+	 * NOTE: if set to false and there are more than 1 row in the table, the table
+	 * will consider it not to be flat (i.e. resume horizontal printing.)
+	 * @default false
+	 */
+	get isFlat(): boolean {
+		if (!this.flat && this.rawData.length + this.newData.length <= 1) return false;
+		return true;
+	}
+
+	/**
+	 * Get the total number of rows in the table.
+	 * NOTE: there might be more lines as a row might be spread across multiple lines.
+	 */
 	get totalRows(): number {
 		return this.rawData.length + this.newData.length;
 	}
 
 	// #endregion properties
+
 	/**
 	 * Initializer of a Table object.
-	 * @param options The Options to be used by the table.
 	 * @param data A data Object if available.
+	 * @param options The Options to be used by the table.
 	 */
 	constructor(
-		options?: Options,
 		data?:
 			| (string | number | object)[]
 			| (string | number | object | (string | number)[])[][]
 			| object,
+		options?: Options | Options[],
 	);
 
 	/**
@@ -284,39 +549,42 @@ export class Table extends BaseData {
 	 * @param row The row number where this table will be placed.
 	 */
 	constructor(
-		options?: Options,
 		data?:
 			| (string | number | object)[]
 			| (string | number | object | (string | number)[])[][]
 			| object,
+		options?: Options | Options[],
 		depth?: number,
 		key?: string,
 		row?: number,
 	);
 
 	constructor(
-		options: Options = {},
 		data:
 			| (string | number | object)[]
 			| (string | number | object | (string | number)[])[][]
 			| object = {},
-		depth = 0,
+		options: Options | Options[] = {},
+		/** The depth (in the data structure) of the current Table */
+		private readonly deep = 1,
 		key = '',
 		row = -1,
 	) {
-		super(key.toString(), row);
-		this.maxdepth = options.maxDepth != null ? Math.max(1, options.maxDepth) : 3;
-		this.deep = depth > 0 ? depth : 1;
-		this.eLevel = options.eLevel || emojiLevel.all;
-		this.nextOption.eLevel = this.eLevel;
+		super(key.toString(), row, options, deep);
+		const currOption: Options = (Array.isArray(options) ? options.shift() : options) || {};
+		let defaultNext: Options = {};
 
-		// deal with border options
-		if (options.borders != null) {
-			if (!options.borders) this.setBorders(BorderTypes.none);
-			else this.setBorders(options.borders);
+		// GET ALL PROPERTIES ----
+		const { maxDepth, eLevel, fill, borders, inclusive, align, headAlign } = currOption;
+		const { size, margin, tabSize, padding, flatten, excludeHeader, stream } = currOption;
+		const { columns, columnPattern, canGrow, print } = currOption;
+
+		// BORDERS -----
+		if (borders != null) {
+			this.setBorders(borders as unknown);
 		} else {
 			this.setBorders({
-				content: templates.single,
+				content: { ...templates.single },
 				header: {
 					...templates.single,
 					bottom: boksBorders.HorizontalLines.double,
@@ -324,76 +592,154 @@ export class Table extends BaseData {
 					bottomIntersect: boksBorders.Intersect.doubleSingle,
 					bottomRight: boksBorders.RightIntersect.doubleSingle,
 				},
+				headPure: {
+					...templates.single,
+					bottomIntersect: boksBorders.BottomIntersect.singleDouble,
+					topIntersect: boksBorders.TopIntersect.singleDouble,
+					vertical: boksBorders.VerticalLines.double,
+					intersect: boksBorders.Intersect.singleDouble,
+				},
 			});
+			const { content, headPure, header } = this.borders;
+			defaultNext.borders = {
+				content: {
+					...content,
+					horizontal: boksBorders.HorizontalLines.none,
+				},
+				headPure: {
+					...headPure,
+					horizontal: boksBorders.HorizontalLines.none,
+				},
+				header: {
+					...header,
+					horizontal: boksBorders.HorizontalLines.none,
+				},
+			};
 		}
 
-		// deal with general options
-		if (options.align) this.colAlign = options.align;
-		if (options.headAlign) this.colHeadAlign = options.headAlign;
-		if (options.maxSize != null) this.maxsize = Math.max(options.maxSize, 10);
-		if (options.size != null && options.size > 0) {
-			this.size = options.size;
-			this.maxsize = options.size;
-			this.fixed = true;
-		}
-		if (!this.maxsize && this.deep === 1) this.maxsize = 120;
-		if (options.padding != null) this.padding = Math.max(options.padding, 0);
-		else this.padding = 2;
-		this.margin = Math.max(options.margin != null ? options.margin : 2, 0);
-		this.tabsize = options.tabSize != null ? Math.max(options.tabSize, 0) : 2;
-		this.flat = options.flatten;
-		if (options.excludeHeader != null) this.header = options.excludeHeader ? false : '';
-		if (options.stream) this.streaming = options.stream;
-		if (options.subOptions && options.subOptions.length > 0) {
-			const next = options.subOptions.shift();
-			if (next === false) this.nextOption = {};
-			else {
-				this.nextOption = {
-					...this.nextOption,
+		// GENERAL ----
+		this.maxdepth = maxDepth != null ? Math.max(1, maxDepth) : 3;
+		this.eLevel = eLevel || emojiLevel.all;
+		this.fill = fill != null && deep === 1 ? fill : false;
+		this.all = inclusive;
+		this.colAlign = align || Alignment.left;
+		this.colHeadAlign = headAlign || Alignment.left;
+		this.flat = flatten || false;
+		this.header = excludeHeader ? false : '';
+
+		// SIZING ----
+		if (size > -1) this.size = size;
+		this.padding = padding != null ? Math.max(padding, 0) : 2;
+		this.margin = Math.max(margin != null ? margin : 2, 0);
+		this.tabsize = tabSize != null ? Math.max(tabSize, 0) : 2;
+		this.streaming = (stream && this.deep === 1) || false;
+
+		delete currOption.maxSize;
+		defaultNext = {
+			...currOption,
+			...defaultNext,
+			maxDepth: this.maxdepth,
+			eLevel: this.eLevel,
+			padding: Math.max(Math.round(this.padding / 2), 1),
+			margin: 0,
+			stream: false,
+		};
+
+		// NEXT SET OF OPTIONS ----
+		// delete non-transferable options.
+		delete defaultNext.columns;
+		if (Array.isArray(options) && options.length > 0) {
+			let next = options.shift();
+			if (next === false) {
+				next = {
+					stream: false,
+					maxDepth: this.maxdepth,
+					eLevel: this.eLevel,
+				};
+			} else {
+				next = {
+					...defaultNext,
 					...next,
 				};
-				if (options.subOptions.length > 0) {
-					this.nextOption.subOptions = options.subOptions;
-				}
 			}
+			this.nextOption = [next];
+			if (options.length > 0) this.nextOption.push(...options);
+		} else this.nextOption = [defaultNext];
+
+		// COLUMN INFO ----
+		if (columnPattern != null) {
+			if (typeof columnPattern === 'boolean') {
+				this.columnPattern = columnPattern ? 'col-~D' : '';
+			} else if (columnPattern && !/~D/.test(columnPattern)) {
+				this.columnPattern = `${columnPattern}~D`;
+			} else this.columnPattern = columnPattern || 'col-~D';
 		}
 
-		if (options.columnPattern != null) {
-			if (typeof options.columnPattern === 'boolean') {
-				this.columnPattern = options.columnPattern ? 'col-~D' : '';
-			} else if (this.columnPattern && !/~D/.test(options.columnPattern)) {
-				this.columnPattern = `${options.columnPattern}~D`;
-			} else this.columnPattern = options.columnPattern || 'col-~D';
+		if (columns != null) {
+			this.addColumns(columns);
+			this.canGrow = canGrow != null ? canGrow : false;
 		}
-		// deal with column information details.
-		if (options.columns != null) {
-			this.addColumns(options.columns);
-			this.canGrow = options.canGrow !== null ? options.canGrow : false;
+
+		// DATA ----
+		const skipAdd =
+			data == null ||
+			(Array.isArray(data) && data.length === 0) ||
+			(typeof data === 'object' && Object.keys(data).length === 0);
+		if (!skipAdd) {
+			this.addData(data);
+			if (canGrow != null && this.canGrow) this.canGrow = currOption.canGrow;
 		}
-		// deal with data object
-		this.addData(data);
-		if (options.canGrow != null) this.canGrow = options.canGrow;
-		if (data) this.print();
+
+		// FINALIZE ----
+		if (data && print) this.print();
+		else if (this.deep > 1) {
+			this.action = actions.RESIZE + actions.HEADER;
+			this.buildLines();
+		}
 	}
 
 	// #region event handlers -------------------------------------------------
-	private maxEventListener = (): void => {
-		// did the sizes change?  recalc
-		this.calcSize();
+	/**
+	 * Is called by a CombinedInfo (column) object
+	 * when the maximum size of the column has changed.
+	 * @param info The combinedInfo object that triggered a maximum size change event.
+	 */
+	private maxEventListener = (info: CombinedInfo): void => {
+		if (info.maxContent > info.size) this.action |= actions.RESIZE;
 	};
 
+	/**
+	 * Is called by a CombinedInfo (column) object
+	 * when the lines ('header') of the column has changed.
+	 * @param itm The combinedInfo object that triggered a line change event.
+	 */
+	private lineEventListener = (itm: CombinedInfo): void => {
+		// if ratio - then all data need to change, else only the header has changed.
+		if (itm.ratio > 0) this.colChanged();
+		else if (!(this.state & states.SETRATIO)) this.action |= actions.HEADER;
+	};
+
+	/**
+	 * Is called by a CombinedInfo (column) object
+	 * when the ratio (header / data) of the column has changed.
+	 */
+	private ratioEventListener = (): void => {
+		this.action |= actions.RESIZE + actions.HEADER;
+	};
+
+	/**
+	 * Is called by a CombinedInfo (column object)
+	 * when the size of the column has changed.
+	 * @param info The CombinedInfo object that triggered a change in size event.
+	 */
 	private sizeEventListener = (info: CombinedInfo): void => {
-		// change data sizes and lists
-		this.colChanged();
-		// set new sizes to data
-		const flat = this.flatten;
 		const { name, name2 } = info;
-		const size = flat ? info.size : info.contentSize;
+		const size = info.contentSize;
 
 		const addToData = (data: rawDataObject): void => {
 			const d = data;
 			if (d[name]) d[name].size = size;
-			else if (d[name2]) d[name2].size = size;
+			if (d[name2]) d[name2].size = size;
 		};
 
 		this.newData.forEach(addToData);
@@ -401,104 +747,73 @@ export class Table extends BaseData {
 		this.rawData.forEach(addToData);
 	};
 
-	private ratioEventListener = (info: CombinedInfo): void => {
-		// set data sizes to correct value
-		if (this.flatten) return;
-
-		this.colChanged();
-
-		const addToAll = (data: rawDataObject): void => {
-			const keys = Object.keys(data);
-			const d = data;
-			keys.forEach(key => {
-				d[key].size = info.contentSize;
-			});
-		};
-
-		this.newData.forEach(addToAll);
-
-		this.rawData.forEach(addToAll);
-	};
-
-	private lineEventListener = (itm: CombinedInfo): void => {
-		// the data has changed
-
-		// if ratio - then all data need to change, else only the header has changed.
-		if (itm.ratio > 0) this.colChanged();
-		else this.drawBorders();
-	};
-
-	private orderEventListener = (): void => {
-		// The order of the columns have changed.  so everything should be redrawn.
-		this.sortCols();
-		this.colChanged();
-	};
-
-	private dataChangeEvent = (colData: BaseData) => {
-		// the data lines have changed... so those rows should be redrawn.
-		const num = isNum(colData.key) ? parseInt(colData.key, 10) : -1;
-		if (num > -1) {
-			if (this.rawData.length > num) {
-				for (let i = this.rawData.length - 1; i >= num; i--) {
-					this.newData.unshift(this.rawData.pop());
-				}
-				// remove from lines
-				this.newLines = [];
-				for (let i = this.lnes.length - 1; i >= 0; i--) {
-					if (this.lnes[i].index === i) this.lnes.splice(i, 1);
-				}
-			}
-		} else this.mustRedraw();
-	};
-
 	// #endregion event handlers ----------------------------------------------
 
 	// #region private functions
+	// --> BORDERS xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+	/**
+	 * Make sure a Vertical border fits a specified size (if custom borders is used)
+	 * @param border The border to fix spacing for.
+	 * @param size The size the border should be
+	 */
 	private fixBorderSpace(border: string, size: number): string {
 		const borderSize = getStringSize(border);
 		const diff = size - borderSize.size;
 		if (diff > 0) {
+			/* istanbul ignore else: only safety for thicker borders than usual */
 			if (diff === 1) return `${border} `;
+			/* istanbul ignore next: never ran - extra thick borders  - safety */
 			const left = Math.floor(diff / 2);
+			/* istanbul ignore next: never ran - extra thick borders  - safety */
 			return fillSpace(left) + border + fillSpace(diff - left);
 		}
 		return border;
 	}
 
-	private sortCols(): void {
-		this.sortedCols.sort((a, b) => {
-			if (a.order === b.order) return 0;
-			if (a.order === 0) return -1;
-			if (b.order === 0) return 1;
-			return a.order - b.order;
-		});
-		this.calcSize();
-	}
-
-	// --> BORDERS xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 	/**
 	 * Set the border types for the current table.
 	 * @param brdrs The border options to add.
 	 */
 	private setBorders(brdrs: boksOptions | boksOptions[] | combinedBorders | BorderTypes): void {
+		if (!brdrs) {
+			this.borders.header = false;
+			this.borders.content = false;
+			return;
+		}
+		let header: BordersExtended | false = false;
+		let content: BordersExtended | false = false;
+		let headPure: BordersExtended | false;
 		if (typeof brdrs === 'string') {
-			let header: BordersExtended | false = false;
-			let content: BordersExtended | false = false;
 			switch (brdrs) {
 				case BorderTypes.bold:
 					header = { ...templates.bold };
 					content = { ...templates.bold };
+					headPure = { ...templates.bold };
 					break;
 				case BorderTypes.boldSingle:
 					header = {
 						...templates.bold,
-						horizontal: boksBorders.HorizontalLines.line,
 						vertical: boksBorders.VerticalLines.line,
+						horizontal: boksBorders.HorizontalLines.line,
+						intersect: boksBorders.Intersect.line,
+						bottomIntersect: boksBorders.BottomIntersect.boldSingle,
+						topIntersect: boksBorders.TopIntersect.boldSingle,
+					};
+					headPure = {
+						...templates.bold,
+						intersect: boksBorders.Intersect.singleBold,
+						horizontal: boksBorders.HorizontalLines.line,
+						leftIntersect: boksBorders.LeftIntersect.singleBold,
 					};
 					content = {
 						...templates.bold,
-						horizontal: boksBorders.HorizontalLines.line,
 						vertical: boksBorders.VerticalLines.line,
+						horizontal: boksBorders.HorizontalLines.line,
+						intersect: boksBorders.Intersect.line,
+						bottomIntersect: boksBorders.BottomIntersect.boldSingle,
+						topIntersect: boksBorders.TopIntersect.boldSingle,
+						leftIntersect: boksBorders.LeftIntersect.singleBold,
+						rightIntersect: boksBorders.RightIntersect.singleBold,
 					};
 					break;
 				case BorderTypes.boldSingleTop:
@@ -506,45 +821,80 @@ export class Table extends BaseData {
 						...templates.bold,
 						horizontal: boksBorders.HorizontalLines.line,
 						vertical: boksBorders.VerticalLines.line,
+						topIntersect: boksBorders.TopIntersect.boldSingle,
+						bottomIntersect: boksBorders.BottomIntersect.boldSingle,
 					};
 					content = { ...templates.empty };
+					headPure = {
+						...templates.bold,
+						horizontal: boksBorders.HorizontalLines.line,
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						intersect: boksBorders.RightIntersect.singleBold as any,
+						leftIntersect: boksBorders.LeftIntersect.singleBold,
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						bottomIntersect: boksBorders.BottomRightBorder.bold as any,
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						topIntersect: boksBorders.TopRightBorder.bold as any,
+					};
 					break;
 				case BorderTypes.boldTop:
 					header = { ...templates.bold };
 					content = { ...templates.empty };
+					headPure = {
+						...templates.bold,
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						intersect: boksBorders.RightIntersect.bold as any,
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						bottomIntersect: boksBorders.BottomRightBorder.bold as any,
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						topIntersect: boksBorders.TopRightBorder.bold as any,
+					};
 					break;
 				case BorderTypes.boldTopSingle:
 					header = { ...templates.bold };
 					content = { ...templates.single };
+					headPure = { ...templates.bold };
 					break;
 				case BorderTypes.single:
 					header = { ...templates.single };
 					content = { ...templates.single };
+					headPure = { ...templates.single };
 					break;
 				case BorderTypes.singleTop:
 					header = { ...templates.single };
 					content = { ...templates.empty };
+					headPure = {
+						...templates.single,
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						topIntersect: boksBorders.TopRightBorder.line as any,
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						intersect: boksBorders.RightIntersect.line as any,
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						bottomIntersect: boksBorders.BottomRightBorder.line as any,
+					};
 					break;
 				default:
+					header = { ...templates.empty };
+					content = { ...templates.empty };
 					// eslint-disable-next-line no-useless-return
 					break;
 			}
-			if (header && content) {
-				[this.borders.header = false, this.borders.content = false] = getBorder([
-					header,
-					content,
-				]);
-			}
 		} else if ((brdrs as combinedBorders).header || (brdrs as combinedBorders).content) {
-			this.borders = { ...(brdrs as combinedBorders) };
+			({ header, content, headPure } = { ...(brdrs as combinedBorders) });
 		} else if (Array.isArray(brdrs)) {
-			[this.borders.header = false, this.borders.content = false] = getBorder(brdrs);
+			[header = false, content = false, headPure] = brdrs;
+			if (header) header = { ...header };
+			if (content) content = { ...content };
+			if (headPure) headPure = { ...headPure };
 		} else {
-			[this.borders.header = false, this.borders.content = false] = getBorder([
-				{ ...(brdrs as boksOptions) },
-				{ ...(brdrs as boksOptions) },
-			]);
+			header = { ...(brdrs as boksOptions) };
+			content = { ...(brdrs as boksOptions) };
 		}
+		if (headPure == null && header) headPure = { ...header };
+		if (header === false) header = { ...templates.empty };
+		if (content === false) content = { ...templates.empty };
+		[this.borders.header, this.borders.content] = getBorder([header, content]);
+		this.borders.headPure = headPure;
 
 		this.updateBorders();
 	}
@@ -559,84 +909,144 @@ export class Table extends BaseData {
 		if (!border) return answer;
 		let left: false | string = '';
 		let flat: false | string = '';
-		let middle = '';
+		let flat2: false | string = '';
+		let middle: false | string = '';
 		let right: false | string = '';
+		const { isFlat } = this;
+		const { headPure: headerPure, content, header } = this.borders;
+		const excludeHead = this.head === false;
+		const head = excludeHead ? false : headerPure != null ? headerPure : header;
 
 		switch (borderType) {
 			case 1:
-				left = border.leftIntersect;
-				right = border.rightIntersect;
-				flat = border.horizontal;
-				middle = border.intersect;
+				if (!isFlat) {
+					left = head ? head.leftIntersect : '';
+					/* istanbul ignore next: :'' never called */
+					right = content ? content.rightIntersect : '';
+					/* istanbul ignore next: :'' never called */
+					flat = content ? content.horizontal : '';
+					flat2 = head ? head.horizontal : '';
+					/* istanbul ignore else: content was always available */
+					if (!excludeHead) {
+						/* istanbul ignore next: :'' never called */
+						middle = head ? head.intersect : '';
+						if (!middle && content && content.intersect) {
+							middle = content.intersect;
+						}
+					} else middle = content ? content.leftIntersect || '' : '';
+				} else {
+					right = border.rightIntersect;
+					left = border.leftIntersect;
+					flat = border.horizontal;
+					middle = border.intersect;
+				}
 				break;
 			case 2:
-				left = border.bottomLeft;
-				right = border.bottomRight;
-				flat = border.bottom;
-				middle = border.bottomIntersect;
+				if (!isFlat) {
+					left = head ? head.bottomLeft : '';
+					/* istanbul ignore next: :'' never called */
+					right = content ? content.bottomRight : '';
+					/* istanbul ignore next: :'' never called */
+					flat = content ? content.bottom : '';
+					flat2 = head ? head.bottom : '';
+					/* istanbul ignore else: content was always available */
+					if (!excludeHead) {
+						/* istanbul ignore next: :'' never called */
+						middle = head ? head.bottomIntersect : '';
+						if (!middle && content && content.bottomIntersect) {
+							middle = content.bottomIntersect;
+						}
+					} else middle = content ? content.bottomLeft || '' : '';
+				} else {
+					left = border.bottomLeft;
+					right = border.bottomRight;
+					flat = border.bottom;
+					middle = border.bottomIntersect;
+				}
 				break;
 			default:
-				left = border.topLeft;
-				right = border.topRight;
-				flat = border.top;
-				middle = border.topIntersect;
+				if (!isFlat) {
+					left = head ? head.topLeft : '';
+					/* istanbul ignore next: :'' never called */
+					right = content ? content.topRight : '';
+					/* istanbul ignore next: :'' never called */
+					flat = content ? content.top : '';
+					flat2 = head ? head.top : '';
+					/* istanbul ignore else: content was always available */
+					if (!excludeHead) {
+						/* istanbul ignore next: :'' never called */
+						middle = head ? head.topIntersect : '';
+						if (!middle && content && content.topIntersect) {
+							middle = content.topIntersect;
+						}
+					} else middle = content ? content.topLeft || '' : '';
+				} else {
+					left = border.topLeft;
+					right = border.topRight;
+					flat = border.top;
+					middle = border.topIntersect;
+				}
 				break;
 		}
+		if (!flat && !flat2) return answer;
+		/* istanbul ignore next: !flat & !middle is never tested */
 		if (!left && !right && !flat && !middle) return answer;
 		if (!left) left = ' ';
 		if (!right) right = ' ';
 		if (!flat) flat = ' ';
+		if (!flat2) flat2 = ' ';
+		/* istanbul ignore if: middle always exists */
+		if (!middle) middle = ' ';
 		const pad = fillSpace(this.padding, flat);
-		const spacer = pad + middle + pad;
-		let head = 0;
-		let content = 0;
-		const { flatten } = this;
+		let pad2 = fillSpace(this.padding, flat2);
+		const spacer = (isFlat ? pad : pad2) + middle + pad;
+		let H = 0;
+		let C = 0;
 		this.sortedCols.forEach(col => {
-			if (flatten) {
+			if ((!col.hasContent && !this.inclusive) || col.size <= 0) return;
+			if (isFlat) {
 				const { size } = col;
-				if (size === 0) return;
 				if (answer !== '') answer += spacer;
 				answer += fillSpace(size, flat as string);
 				return;
 			}
-			head = Math.max(head, col.headerSize);
-			content = Math.max(content, col.contentSize);
+			H = Math.max(H, col.headerSize);
+			C = Math.max(C, col.contentSize);
 		});
-		if (!flatten) answer = fillSpace(head, flat) + spacer + fillSpace(content, flat);
+		if (H === 0 && C === 0 && !answer) return '';
+		if (!isFlat) {
+			if (excludeHead) {
+				H = 0;
+				left = middle;
+				pad2 = pad;
+				answer = fillSpace(C, flat);
+			} else answer = fillSpace(H, flat2) + spacer + fillSpace(C, flat);
+		}
 		if (this.deep <= 1) {
-			answer = fillSpace(this.margin) + left + pad + answer + pad + right;
+			answer = fillSpace(this.margin) + left + (isFlat ? pad : pad2) + answer + pad + right;
 		}
 		return answer;
 	}
 
+	// --> BUILDERS xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+	/**
+	 * Build the header component for the table.
+	 */
 	private buildHeader(): void {
-		if (this.head === false || this.buildingHeader) return;
-		if (!this.flatten && this.deep > 1) {
+		if (this.head === false || this.state & states.BUILDHEADER) return;
+		const { isFlat: flat, deep, padString, headerVBorder, borders, margin, lBorder } = this;
+		if (!flat) {
 			this.header = '';
 			return;
 		}
-		this.buildingHeader = true;
 
-		const headSpacer = this.pad + this.headerVBorder + this.pad;
+		this.state |= states.BUILDHEADER;
+		const headSpacer = padString + headerVBorder + padString;
 
-		// get left spacing
-		let border = '';
-		if (this.flatten) border = this.borders.header ? this.borders.header.left || '' : '';
-		border = this.fixBorderSpace(border, this.lBorder);
-
-		const left = fillSpace(this.margin) + border + this.pad;
-
-		// get right spacing
-		border = this.borders.header ? this.borders.header.right || '' : '';
-		const right = `${this.pad + border}\n`;
-
-		this.header = this.buildBorder(this.borders.header, 0);
-		if (this.header) this.header += '\n';
 		let max = 1;
-
 		let line = '';
 		const buildCol = (col: CombinedInfo, indx: number): void => {
-			if (col.size <= 0) return;
+			if (col.size <= 0 || (!col.hasContent && !this.inclusive)) return;
 			const colLine = col.lines.length > indx ? col.lines[indx] : col.emptyHeader;
 			line += (line !== '' ? headSpacer : '') + colLine;
 			if (indx === 0) max = Math.max(col.lines.length, max);
@@ -647,19 +1057,243 @@ export class Table extends BaseData {
 		for (let i = 0; i < max; i++) {
 			line = '';
 			this.sortedCols.forEach(col => buildCol(col, i));
+			/* istanbul ignore else: if should always evaluate to true - safety */
 			if (line) lines.push(line);
 		}
+
+		// get left spacing
+		let border = '';
+		border = borders.header ? borders.header.left || '' : '';
+		border = this.fixBorderSpace(border, lBorder);
+
+		const left = deep > 1 ? '' : fillSpace(margin) + border + padString;
+
+		// get right spacing
+		border = borders.header ? borders.header.right || '' : '';
+		const right = deep > 1 ? '\n' : `${padString + border}\n`;
+		this.header = deep > 1 ? '' : this.buildBorder(borders.header, 0);
+		if (this.header) this.header += '\n';
+
 		this.header += lines.reduce((prev, curr) => prev + left + curr + right, '');
-		border = this.buildBorder(this.borders.header, 2);
+		border = this.buildBorder(borders.header, 2);
+		if (!border && borders.content) border = this.buildBorder(borders.content, 0);
 		this.header += border ? `${border}\n` : '';
-		this.buildingHeader = false;
+		this.state ^= states.BUILDHEADER;
 	}
 
-	/** should be called when the table size have changed. */
-	private drawBorders(): void {
-		this.bottomBorder = this.buildBorder(this.borders.content, 2);
-		this.separator = this.buildBorder(this.borders.content, 1);
+	/**
+	 * Build the lines for the table.
+	 * [Push new items into newLines array, and move data from newData to rawData Arrays]
+	 */
+	protected buildLines(): boolean {
+		// DATA VALIDATION
+		if (this.newData.length === 0) return false;
+		if (this.action & actions.RESIZE) this.calcSize();
+		if (this.action & actions.HEADER) this.buildMainComp();
+		// SETUP
+		const { isFlat: flat, padString: pad, headerVBorder, contentVBorder, deep, margin } = this;
+		const { header, content } = this.borders;
+		const { inclusive, separator, lBorder } = this;
+		const excludeHead = this.head === false;
+		const lines: lineObjects[] = [];
+		// to be used in case of ratio (none flat column)
+		const headSpacer = flat ? '' : pad + headerVBorder + pad;
+		const contentSpacer = pad + (contentVBorder || '') + pad;
+		// the rowLines to add as value
+		let value: string[] = [];
+
+		// CONSTRUCTION
+		// Build Left Spacing
+		let border = '';
+		if (!flat) border = header ? header.left || '' : '';
+		else border = content ? content.left || '' : '';
+		border = this.fixBorderSpace(border, lBorder);
+
+		const left = deep <= 1 ? fillSpace(margin) + border + pad : '';
+
+		// Build right spacing
+		border = content ? content.right || '' : '';
+		const right = deep <= 1 ? pad + border : '';
+
+		// fix values before start
+		if (this.rawData.length === 0) {
+			this.lnes = [];
+			this.newLines = [];
+			this.val = '';
+		}
+
+		// get starting index
+		let startRow = this.rawData.length;
+		if (this.newLines.length > 0) startRow = this.newLines[this.newLines.length - 1].index + 1;
+
+		/**
+		 * merge lines together and build the lines to be pushed onto the lines array.
+		 */
+		const buildLine = (info: colLineInfo[], lineNum: number): string => {
+			let line = '';
+			let hasData = false;
+			for (let i = 0, len = info.length; i < len; i++) {
+				const itm = info[i];
+				/* istanbul ignore next: all cols will have content here - safety */
+				if (itm.col.size <= 0 || (!itm.col.hasContent && !inclusive)) continue;
+				// add content
+				let tmpLine = itm.lines[lineNum] || itm.col.emptyContent;
+				// add header if needs be
+				if (!flat) {
+					const tmpLine2 = excludeHead
+						? ''
+						: itm.col.lines[lineNum] || itm.col.emptyHeader;
+					/* istanbul ignore next: tmpLine2.trim() never '' in test */
+					if (tmpLine.trim() === '' && tmpLine2.trim() === '') continue;
+					else hasData = true;
+					if (!excludeHead) tmpLine = tmpLine2 + headSpacer + tmpLine;
+				} else if (tmpLine.trim()) hasData = true;
+				if (line !== '') line += contentSpacer;
+				line += tmpLine;
+			}
+			return hasData || inclusive ? left + line + right : '';
+		};
+
+		/**
+		 * Validate and construct each line and push it onto lines array.
+		 */
+		const pushLine = (info: colLineInfo[], max: number, index: number, cntr = 0): void => {
+			for (let lne = 0; lne < max; lne++) {
+				const line = buildLine(info, lne);
+				/* istanbul ignore else: no else */
+				if (line.trim()) value.push(line);
+			}
+			if (deep > 1 && separator && (index > 0 || cntr > 0) && value.length > 0) {
+				value.unshift(separator);
+			}
+			lines.push({ index, value });
+		};
+
+		/**
+		 * Orchastrate the construction of a lines array by deconstructing a data object.
+		 */
+		const createRowLines = (data: rawDataObject, idx: number): void => {
+			let max = 0;
+			// the index of the rowwLines
+			const index = idx + startRow;
+			const colInfo: colLineInfo[] = [];
+			value = [];
+			let cntr = 0;
+			// set sizes
+			this.sortedCols.forEach(col => {
+				const { name, name2 } = col;
+
+				const info: colLineInfo = {
+					key: name,
+					col: col,
+					lines: [''],
+				};
+				// see if column exist on current row
+				const hasData = data[name] || data[name2];
+				if (!hasData && !inclusive) {
+					colInfo.push(info);
+					return;
+				}
+				const NAME = data[name] ? name : name2;
+				info.lines = fillLine(hasData ? data[NAME].lines : [''], col);
+				if (!flat) {
+					value = [];
+					max = Math.max(col.lines.length, info.lines.length);
+					pushLine([info], max, index, cntr++);
+				} else {
+					max = Math.max(max, info.lines.length, col.lines.length);
+					colInfo.push(info);
+				}
+			});
+
+			if (flat) pushLine(colInfo, max, index);
+		};
+
+		this.newData.forEach(createRowLines);
+		/* istanbul ignore else: no else */
+		if (lines.length > 0) this.newLines.push(...lines);
+		this.rawData.push(...this.newData);
+		this.newData = [];
+		return lines.length > 0;
+	}
+
+	/** Build the main "static" components ( borders, header ) */
+	private buildMainComp(): void {
+		this.action ^= actions.HEADER;
+		const { content } = this.borders;
+		this.bottomBorder =
+			this.deep > 1 || (!content && this.head === false) ? '' : this.buildBorder(content, 2);
+		this.separator = this.buildBorder(content, 1);
 		this.buildHeader();
+	}
+
+	/**
+	 * Is called after new data has been added to the table and
+	 * the current rows of the table is more than one but was one before the add.
+	 */
+	private dataAddedRatioChange(): void {
+		this.redoData();
+		this.setRatio();
+		this.action |= actions.RESIZE + actions.HEADER;
+	}
+
+	/**
+	 * Builds the string value of for the table.
+	 */
+	private getValue(): string {
+		if (this.val && this.newLines.length === 0 && this.newData.length === 0) return this.val;
+		let result = '';
+		this.buildLines();
+		const { header, streaming, oldVal, oldHeader, separator } = this;
+		// const resetVal = this.lnes.length === 0;
+
+		if ((header !== false && header !== oldHeader && oldVal) || this.lnes.length === 0) {
+			this.valueReset = true;
+			this.val = '';
+		}
+		// try remove last new line character placed during last run.
+		if (this.val) {
+			const nChars = this.val.split('\n');
+			/* istanbul ignore else: there always thould be n chars - safety */
+			if (nChars.length > 0 && nChars[nChars.length - 1] === '') {
+				nChars.pop();
+				this.val = nChars.join('\n');
+			}
+		}
+		if (this.valueReset || (streaming && !oldVal)) result = header || '';
+
+		const buildLines = (line: lineObjects): void => {
+			let tmpVal = '';
+			line.value.forEach(lne => {
+				tmpVal += tmpVal !== '' || this.val !== '' ? `\n${lne}` : lne;
+			});
+			this.val += tmpVal;
+		};
+		this.newLines.forEach((line, idx) => {
+			if (line.value.length === 0) return;
+			if (this.val !== '' && (idx > 0 || streaming)) {
+				this.val += separator ? `\n${separator}` : '';
+			}
+			buildLines(line);
+		});
+		this.val += this.val !== '' ? '\n' : '';
+		if (oldVal && this.val && !this.valueReset && separator) {
+			this.val = `${separator}\n${this.val}`;
+		}
+		// const head = !streaming && !this.valueReset && header && !oldVal ? header : '';
+		this.lnes.push(...this.newLines);
+		this.newLines = [];
+		return streaming || this.valueReset ? result + this.val : oldVal + this.val;
+	}
+
+	/**
+	 * Is called when the table needs to be completely redone because of a change
+	 * in the environment (i.e. sizing or ratio etc).
+	 */
+	private redoData(): void {
+		if (this.rawData.length === 0) return;
+		this.newData.unshift(...this.rawData);
+		this.rawData = [];
 	}
 
 	// --> COLUMN FUNCTIONS xxxxxxxxxxxxxxxxxxxxx
@@ -671,81 +1305,74 @@ export class Table extends BaseData {
 		let colKeys: string[];
 
 		let prevKey = -1;
-		let keyLen = this.keys.length;
 		let fixCombined = false;
 		let newCol = false;
 
 		// confirm if a new olumn may be added or not.
-		const canProceed = (name: string): boolean => {
-			if (this.canGrow === false) {
-				if (isNum(name)) {
-					if (this.keys.length - 1 < parseInt(name, 10)) return false;
-				} else return false;
-			}
-			return true;
-		};
+		const canProceed = (): boolean => (this.canGrow ? this.keys.length - 1 >= prevKey : false);
 
 		const buildCombinedCols = (): void => {
 			this.sortedCols = [];
+			let max = this.headMax;
 			this.keys.forEach((key: string, idx: number) => {
 				const k = key || idx.toString();
 				if (this.combined[k]) {
-					this.combined[k].compare(this.cols[k], this.cols[idx.toString()]);
+					this.combined[k].addCol(this.cols[key], this.cols[idx.toString()]);
 				} else {
 					this.combined[k] = new CombinedInfo(this.cols[key], this.cols[idx.toString()]);
-					// register events
-					this.combined[k].on(Events.EventChangeMax, this.maxEventListener);
-					this.combined[k].on(Events.EventChangeSize, this.sizeEventListener);
-					this.combined[k].on(Events.EventChangeRatio, this.ratioEventListener);
-					this.combined[k].on(Events.EventChangeLines, this.lineEventListener);
-					this.combined[k].on(Events.EventChangeOrder, this.orderEventListener);
+					/* istanbul ignore else: no else */
+					if (this.combined[k].proper) {
+						// register events
+						this.combined[k].on(Events.EventChangeMax, this.maxEventListener);
+						this.combined[k].on(Events.EventChangeSize, this.sizeEventListener);
+						this.combined[k].on(Events.EventChangeRatio, this.ratioEventListener);
+						this.combined[k].on(Events.EventChangeLines, this.lineEventListener);
+					}
 				}
+				/* istanbul ignore if: code changed, should never be hit */
 				if (!this.combined[k].proper) {
-					this.combined[k].removeListener(Events.EventChangeMax, this.maxEventListener);
-					this.combined[k].removeListener(Events.EventChangeSize, this.sizeEventListener);
-					this.combined[k].removeListener(
-						Events.EventChangeRatio,
-						this.ratioEventListener,
-					);
-					this.combined[k].removeListener(
-						Events.EventChangeLines,
-						this.lineEventListener,
-					);
-					this.combined[k].removeListener(
-						Events.EventChangeOrder,
-						this.orderEventListener,
-					);
+					this.combined[k].removeAllListeners();
 					delete this.combined[k];
 					return;
 				}
+				this.combined[k].headerExternal = -1;
+				max = Math.max(this.combined[k].maxHeader, max);
 				this.sortedCols.push(this.combined[k]);
 			});
 			this.sortCols();
+			if (this.headMax !== max) {
+				this.headMax = max;
+				/* istanbul ignore if: should never be hit */
+				if (this.headMax <= 0) return;
+				this.sortedCols.forEach(col => {
+					const c = col;
+					c.headerExternal = this.headMax;
+				});
+			}
 		};
 
 		// add a new key which does not already exist (to this.keys).
 		const addKey = (key: string): void => {
 			// find next open
-			for (let i = prevKey + 1, len = keyLen; i < len; i++) {
-				if (this.keys[i] === '') {
-					this.keys[i] = key;
-					fixCombined = true;
-					prevKey = i;
-					i = keyLen;
-					return;
-				}
+			const idx = this.keys.indexOf('');
+			if (key === '' && this.keys.length - 1 > prevKey) return;
+
+			if (idx > -1 && idx > prevKey) {
+				this.keys[idx] = key;
+				fixCombined = true;
+				return;
 			}
-			if (!canProceed(key)) return;
+			if (!canProceed()) return;
 			this.keys.push(key);
-			fixCombined = true;
-			prevKey = keyLen;
-			keyLen++;
+			newCol = true;
 		};
 
 		// add column values to cols variable.
-		const addValue = (val: columnProperty, name: string): void => {
-			if (this.cols[name]) return;
-			if (!canProceed(name)) return;
+		const addValue = (val: columnProperty, name: string, original: string): void => {
+			if (this.cols[name]) {
+				prevKey++;
+				return;
+			}
 			const prop: colOptions = {
 				eLevel: this.eLevel,
 				padding: this.padding,
@@ -755,243 +1382,311 @@ export class Table extends BaseData {
 				pattern: this.columnPattern,
 				align: this.colAlign,
 				headAlign: this.colHeadAlign,
+				excludeHeader: this.head === false,
 				...val,
 			};
 			this.cols[name] = new ColumnInfo(prop);
-			if (!this.flatten) this.cols[name].ratio = 1;
+			if (!this.isFlat) this.cols[name].ratio = 1;
 			else this.cols[name].ratio = 0;
 			if (isNum(name)) newCol = true;
+			addKey(original);
+			prevKey++;
 		};
 
 		// get all the values
 		if (Array.isArray(cols)) {
-			colKeys = cols.map((col, idx) => {
-				if (typeof col === 'string') {
-					addValue({ name: col || idx.toString() }, col || idx.toString());
-					return col;
-				}
-				if (typeof col === 'number') {
-					addValue({ name: idx.toString(), order: idx }, idx.toString());
-					return '';
-				}
-				addValue(col, col.name || idx.toString());
-				return col.name || '';
+			cols.forEach((col, idx) => {
+				if (col == null) {
+					addValue({ name: idx.toString() }, idx.toString(), '');
+				} else if (typeof col === 'string') {
+					addValue({ name: col || idx.toString() }, col || idx.toString(), col);
+				} else if (typeof col === 'number') {
+					addValue({ name: idx.toString(), order: col }, idx.toString(), '');
+				} else addValue(col, col.name, col.name);
 			});
 		} else {
 			colKeys = Object.keys(cols);
 			colKeys.forEach(key => {
-				if (typeof cols[key] === 'number') {
-					addValue({ name: key, order: cols[key] as number }, key);
-				} else addValue(cols[key] as columnProperty, key);
+				const colType = typeof cols[key];
+				if (colType === 'number') {
+					addValue({ name: key, order: cols[key] as number }, key, key);
+				} else if (colType === 'boolean') {
+					if (!cols[key]) addValue({ name: key, maxSize: 0, size: 0 }, key, key);
+					else addValue({ name: key }, key, key);
+				} else if (colType === 'string') {
+					addValue({ name: key, printName: cols[key] as string }, key, key);
+				} else addValue(cols[key] as columnProperty, key, key);
 			});
 		}
-
-		// sort out keys
-		colKeys.forEach((key, idx) => {
-			if (key == null) return;
-			if (key === '') {
-				if (keyLen < prevKey) {
-					if (!canProceed(idx.toString())) return;
-					this.keys.push('');
-					fixCombined = true;
-				}
-				prevKey++;
-			} else {
-				const keyIndx = this.keys.indexOf(key);
-				if (keyIndx === -1) addKey(key);
-				else if (keyIndx > prevKey) prevKey = keyIndx;
-			}
-		});
 
 		if (fixCombined || this.keys.length !== this.sortedCols.length || newCol) {
 			buildCombinedCols();
 			this.colChanged();
+			this.action |= actions.RESIZE;
+			this.action |= actions.HEADER;
 		}
 	}
 
-	private mustRedraw(): void {
-		if (this.rawData.length > 0) {
-			this.newData.unshift(...this.rawData);
-			this.rawData = [];
-		}
-	}
-
-	colChanged(): void {
-		this.mustRedraw();
-		this.drawBorders();
-	}
-
-	private calcSize(): void {
-		// fix ratios
-		const flat = this.flatten;
-		const size = this.space;
-		const colCnt = this.keys.length;
-		const tmpSizes: { [key: string]: number } = {};
-		const spacers = this.padding * 2 + this.vBorder;
-		let rat = 0;
-		let runningSize = 0;
-		let runningCnt = 0;
-		let maxTotal = 0;
-		let hasMin = false;
-
-		const removeRunning = (sze: number): void => {
-			runningSize -= sze;
-			if (runningSize > 0) runningSize -= spacers;
-		};
-
-		const addRunning = (nme: string, sze: number): void => {
-			if (sze === 0 || !nme) return;
-			runningSize += (runningSize > 0 ? spacers : 0) + sze;
-			if (runningSize <= size) {
-				tmpSizes[nme] = sze;
-				runningCnt++;
-			} else removeRunning(sze);
-		};
-
-		const percentageCalc = (columnNum: number): void => {
-			const table = size - Math.max(0, flat ? columnNum - 1 : 0) * spacers;
-			this.sortedCols.forEach((col, idx) => {
-				this.sortedCols[idx].ratio = flat ? 0 : 1;
-				if (col.percentage) {
-					this.sortedCols[idx].tableSize = table;
-					addRunning(col.name, col.size);
-				} else if (col.minSize > 0) hasMin = true;
-			});
-		};
-
-		const setMinSizes = (): void => {
-			const remainingSize = size - runningSize;
-			const remainingCnt = colCnt - runningCnt;
-			if (remainingCnt > 0 && remainingSize > 0) {
-				this.sortedCols.forEach(col => {
-					if (!tmpSizes[col.name] && col.minSize > 0) {
-						addRunning(col.name, col.minSize);
-						const diff = col.maxSize - tmpSizes[col.name];
-						if (diff > 0) maxTotal += diff;
-					}
-				});
-			}
-		};
-
-		const setMaxSizes = (): void => {
-			const remainingSize = size - runningSize;
-			const remainingCnt = colCnt - runningCnt;
-			if (remainingCnt > 0 && remainingSize > 0) {
-				const fraction = remainingSize > maxTotal ? maxTotal / remainingSize + 1 : 1;
-				this.sortedCols.forEach(col => {
-					const sze = Math.max(3, Math.floor(col.maxSize * fraction));
-					if (!col.percentage && sze > col.minSize) addRunning(col.name, sze);
-				});
-			}
-		};
-
-		const setSizes = (): void => {
-			for (let i = 0, len = this.sortedCols.length; i < len; i++) {
-				const { name } = this.sortedCols[i];
-				if (!flat) this.sortedCols[i].ratio = rat;
-				this.sortedCols[i].size = tmpSizes[name] ? tmpSizes[name] : 0;
-			}
-		};
-
-		// calculate and set percentage values
-		if (!flat) {
-			// ignore percentage
-			let min = 0;
-			let content = 0;
-			let header = 0;
-			let sze = 0;
-			if (size - spacers > 0) {
-				this.sortedCols.forEach(col => {
-					header = Math.max(col.maxHeader, header);
-					content = Math.max(col.maxContent, content);
-					min = Math.max(min, col.minSize);
-				});
-				rat = header === 0 || content === 0 ? 0.5 : header / (header + content);
-				rat = Math.max(0.15, Math.min(rat, 0.85));
-				if (header > 0 || content > 0) {
-					header = header > 0 ? header : Math.floor(content / rat) - content;
-					content = Math.max(
-						min,
-						content > 0 ? content : Math.floor(header / rat) - header,
-					);
-					sze = header + content + spacers;
-					if (sze > size - spacers) {
-						header = (size - spacers) * rat;
-						content = size - spacers - header;
-						if (content < min) sze = 0;
-						else rat = header / (header + content);
-					}
-				}
-			}
-			this.sortedCols.forEach(col => {
-				addRunning(col.name, sze);
-			});
-		} else {
-			percentageCalc(colCnt);
-			if (hasMin) setMinSizes();
-			setMaxSizes();
-			// safety check
-			if (runningSize === 0 && size > 0 && this.deep === 1 && this.sortedCols.length > 0) {
-				for (let i = 0, len = this.sortedCols.length; i < len; i++) {
-					const { name, minSize } = this.sortedCols[i];
-					if (minSize > 0) {
-						addRunning(name, minSize);
-						i = len;
-					}
-				}
-			}
-
-			if (runningCnt === 0 && size > 0) {
-				// set at least 1 column
-				let found = false;
-				this.sortedCols.forEach(col => {
-					if (col.minSize > size || found) return;
-					addRunning(col.name, Math.min(size, col.maxSize));
-					found = true;
-				});
-			} else if (runningCnt < colCnt) {
-				// correct percentage if possible
-				const colDif = colCnt - runningCnt;
-				if (runningSize + colDif * spacers >= size) percentageCalc(runningCnt);
-			}
-		}
-
-		setSizes();
-	}
-
-	private getValue(): string {
-		let result = '';
-		this.buildLines();
-
-		if (this.header !== false && this.header !== this.oldHeader && this.val) {
-			// rebuild everything if header has changed.
-			this.newLines.unshift(...this.lnes);
-			this.newLineString = '';
-			this.valueReset = true;
-		}
-		if (this.valueReset || (this.streaming && !this.oldVal)) result = this.header || '';
-		let newLines = '';
-
-		const buildLines = (line: lineObjects): void => {
-			let tmpVal = '';
-			line.value.forEach(lne => {
-				tmpVal += tmpVal !== '' ? `\n${lne}` : lne;
-			});
-			newLines += tmpVal;
-		};
-		this.newLines.forEach(line => {
-			if (newLines !== '') newLines += `\n${this.separator}\n`;
-			buildLines(line);
+	/**
+	 * Sort the columns.
+	 */
+	private sortCols(): void {
+		this.sortedCols.sort((a, b) => {
+			if (a.order === b.order) return 0;
+			if (a.order === 0) return -1;
+			if (b.order === 0) return 1;
+			return a.order - b.order;
 		});
-		newLines += newLines !== '' ? '\n' : '';
-		const head =
-			!this.streaming && !this.valueReset && this.header && !this.val ? this.header : '';
-
-		return this.streaming || this.valueReset ? result + newLines : head + this.val + newLines;
 	}
+
+	// --> SIZEING xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+	/**
+	 * The main function of the table responsible for calculating and
+	 * setting the sizes of each column in the table.
+	 */
+	private calcSize(): void {
+		/* istanbul ignore if: should never be hit - safety */
+		if (this.sortedCols.length === 0) return;
+		this.setRatio();
+		const { isFlat: flat, ratio, sizeAdjuster } = this;
+		const size = Math.max(0, this.size - sizeAdjuster);
+		let tmpSizes: number[] = [];
+		const spacers = this.padding * 2 + this.vBorder;
+
+		const setSizes = (fixed = -1): void => {
+			this.sortedCols.forEach((col, idx) => {
+				const c = col;
+				const sze = fixed > -1 ? fixed : tmpSizes[idx] || 0;
+				if (sze) {
+					if (sze !== c.size) c.size = sze;
+				} else c.size = 0;
+			});
+		};
+
+		if (!size) setSizes(0);
+		else if (!flat) {
+			const { headMx, contMax } = this;
+			const actualSize = this.head === false ? contMax : headMx + contMax + spacers;
+			const calcSize = Math.min(size, actualSize);
+			setSizes(calcSize);
+		} else {
+			tmpSizes = this.getSizeAdjuster();
+			setSizes();
+		}
+
+		if (this.size - sizeAdjuster !== size || this.ratio !== ratio) {
+			this.action |= actions.HEADER;
+		}
+		this.action ^= actions.RESIZE;
+	}
+
+	/**
+	 * Get the sizes that each column should be if the columns are spread horizontally.
+	 * @returns { number[] }
+	 */
+	private getSizeAdjuster(): number[] {
+		const { space } = this;
+		const spacers = this.padding * 2 + this.vBorder;
+		const columns = this.keys.length;
+
+		type shortObj = {
+			min: number;
+			max: number;
+			size: number;
+			perc: number;
+			excl: boolean;
+			fix?: number;
+		};
+		const items: Map<number, shortObj> = new Map();
+		const perIndexes: number[] = [];
+		let maxTotal = 0;
+		let total = 0;
+		let percentage = 0;
+		let percentMax = 0;
+		let totCntr = 0;
+		let maxCntr = 0;
+
+		const getPercSize = (current: number): number => {
+			if (!percentage) return 0;
+			return Math.floor(current * (percentage / (1 - percentage)));
+		};
+
+		const filler = (list: number[]): number[] => {
+			if (!this.fill) return list;
+			const { setSize, maxsize, sizeAdjuster } = this;
+			const fixSize = setSize >= 1 ? setSize : maxsize - sizeAdjuster;
+			const spaces = (totCntr + perIndexes.length - 1) * spacers;
+			const available = Math.round((fixSize - spaces) * (percentage > 0 ? percentage : 1));
+			// if (total >= available) return list;
+			const adjuster = 1 - (available - total) / available;
+			total = 0;
+			return list.map(itm => {
+				if (itm <= 0) return itm;
+				const sz = Math.floor(itm / adjuster);
+				total += sz;
+				return sz;
+			});
+		};
+
+		const finalize = (max = false): number[] => {
+			let list: number[] = [];
+			total = 0;
+			totCntr = 0;
+			// get the proper size
+			this.keys.forEach((key, idx) => {
+				if (!items.has(idx)) {
+					list.push(0);
+					return;
+				}
+				const itm = items.get(idx);
+				if (itm.perc) {
+					list.push(-1);
+					return;
+				}
+				if (max) list.push(itm.max);
+				else list.push(itm.size);
+				total += list[idx];
+				if (list[idx]) totCntr++;
+			});
+			// make sure the proper size has been filled
+			list = filler(list);
+			// set the table sizes
+			let p = getPercSize(total);
+			const spaces = (totCntr + perIndexes.length - 1) * spacers;
+			let tblSize = p + total;
+			if (space > tblSize && percentMax > p) {
+				const pMax = Math.round((space - spaces) * percentage);
+				p = Math.max(pMax, p);
+				tblSize = Math.min(space - spaces, Math.floor(p / percentage));
+				p = Math.round(tblSize * percentage);
+				const remainder = tblSize - p;
+				if (remainder > total) {
+					const adj = 1 - (remainder - total) / remainder;
+					list = list.map(itm => {
+						if (itm <= 0) return itm;
+						return Math.floor(itm / adj);
+					});
+				}
+			}
+			perIndexes.forEach(itm => {
+				this.sortedCols[itm].tableSize = tblSize;
+				list[itm] = this.sortedCols[itm].size;
+			});
+			return list;
+		};
+
+		const setSize = (size: number, idx: number, adj = 1): void => {
+			let percentSize = getPercSize(total);
+			let spaces = Math.max(0, (totCntr + perIndexes.length - adj) * spacers);
+			const itm = items.get(idx);
+			const s = size < itm.min ? 0 : size > itm.max && itm.max ? itm.max : size;
+			if (s && total + spaces + s + percentSize <= space) {
+				itm.size = s;
+				if (!adj) totCntr++;
+				total += s;
+			} else if (adj) {
+				// fill space
+				const sz = space - total - spaces - percentSize;
+				if (sz > itm.size && sz < s) {
+					setSize(sz, idx);
+					return;
+				}
+			}
+
+			if (!adj) {
+				// set maxsizes
+				percentSize = getPercSize(maxTotal);
+				spaces = (maxCntr + perIndexes.length) * spacers;
+				if (maxTotal + spaces + itm.max + percentSize <= space) {
+					maxTotal += itm.max;
+					maxCntr++;
+				}
+			}
+		};
+
+		// get info
+		this.sortedCols.forEach((col, idx) => {
+			const { minSize: colMin, isPercent: colPer, setsize: colSet, hasContent } = col;
+			const itm: shortObj = { min: colMin, max: 0, size: 0, perc: 0, excl: false };
+			// only include items that can / should be printed.
+			if (!hasContent && !this.inclusive) return;
+			itm.max = Math.max(col.maxContent, col.maxHeader);
+			if (col.maxFix) itm.max = Math.min(col.maxSize, itm.max);
+			if (itm.min) itm.max = Math.max(itm.min, itm.max);
+
+			if (colSet >= 0) {
+				if (!colPer) {
+					itm.min = colSet;
+					itm.max = colSet;
+					itm.fix = colSet;
+				} else {
+					const testSz = getPercSize(total) + (totCntr + perIndexes.length) * spacers;
+					if (testSz > space) return;
+					itm.perc = colSet;
+					percentage += itm.perc;
+					percentMax += itm.max;
+					perIndexes.push(idx);
+				}
+			}
+			items.set(idx, itm);
+			// initial set
+			if (!itm.perc) setSize(itm.min ? itm.min : 1, idx, 0);
+		});
+
+		if (maxCntr + perIndexes.length === columns && maxTotal <= space) return finalize(true);
+		const reducedSpace =
+			(space - (totCntr + perIndexes.length - 1) * spacers) * (1 - percentage);
+		const adjust = 1 - (reducedSpace - total) / reducedSpace;
+		total = 0;
+		items.forEach((itm, idx) => {
+			const sz = Math.round(itm.size / adjust);
+			setSize(sz, idx);
+		});
+
+		return finalize();
+	}
+
+	/**
+	 * The main function of the table to ensure that the ratio (header to data)
+	 * of the table is correctly caculated and set on each column.
+	 */
+	private setRatio(): void {
+		const { isFlat, ratio, setSize } = this;
+		if (isFlat && ratio === 0) return;
+
+		this.state |= states.SETRATIO;
+		if (isFlat) this.ratio = 0;
+		else {
+			let { headMax: head, contMax: cont } = this;
+			if (setSize >= 0) {
+				head = Math.min(setSize, head);
+				cont = Math.min(setSize, cont);
+			}
+			this.ratio = head / (head + cont);
+		}
+		this.state ^= states.SETRATIO;
+	}
+
+	/**
+	 * A function that is called by the base class to indicate that the main
+	 * size of the table has bee changed.
+	 */
+	protected sizeChanged(): void {
+		this.redoData();
+		this.action |= actions.HEADER + actions.RESIZE;
+	}
+
 	// #endregion private functions
 
 	// #region public functions
+	/**
+	 * Initiate a rebuild of the data components.
+	 */
+	colChanged(): void {
+		this.redoData();
+		if (this.ratio === 0) this.action |= actions.RESIZE;
+	}
+
 	// --> BORDERS xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 	/** Called when the actual border have changed.  Must be done manually if border is changed. */
 	updateBorders(): void {
@@ -999,184 +1694,66 @@ export class Table extends BaseData {
 		this.vBorder = 0;
 		this.lBorder = 0;
 		this.rBorder = 0;
+		const { content, header } = this.borders;
 
-		if (this.borders.content) {
-			if (this.borders.content.vertical) this.vBorder = this.borders.content.vertical.length;
-			if (this.borders.content.left) this.lBorder = this.borders.content.left.length;
-			if (this.borders.content.right) this.rBorder = this.borders.content.right.length;
+		/* istanbul ignore else: else should never be hit - safety */
+		if (content) {
+			if (content.vertical) this.vBorder = content.vertical.length;
+			if (this.deep === 1) {
+				if (content.left) this.lBorder = content.left.length;
+				if (content.right) this.rBorder = content.right.length;
+			}
 		}
 
-		if (this.borders.header) {
-			if (this.borders.header.vertical) {
-				this.vBorder = Math.max(this.vBorder, this.borders.header.vertical.length);
+		/* istanbul ignore else: else should never be hit - safety */
+		if (header) {
+			if (header.vertical) {
+				this.vBorder = Math.max(this.vBorder, header.vertical.length);
 			}
-			if (this.borders.header.left) {
-				this.lBorder = Math.max(this.lBorder, this.borders.header.left.length);
-			}
-			if (this.borders.header.right) {
-				this.rBorder = Math.max(this.rBorder, this.borders.header.right.length);
+			if (this.deep === 1) {
+				if (header.left) this.lBorder = Math.max(this.lBorder, header.left.length);
+				if (header.right) this.rBorder = Math.max(this.rBorder, header.right.length);
 			}
 		}
-		this.drawBorders();
+		this.action |= actions.HEADER;
 		if (old !== this.vBorder + this.lBorder + this.rBorder) {
-			this.calcSize();
+			this.action |= actions.RESIZE;
 		}
-	}
-
-	deleteRow(index: number): void {
-		if (index < 0) return;
-
-		const removeEvents = (data: rawDataObject): void => {
-			const keys = Object.keys(data);
-			keys.forEach(key => {
-				data[key].removeListener(Events.EventDataChanged, this.dataChangeEvent);
-			});
-		};
-		// fix rawdata || new data
-		if (index < this.rawData.length) this.rawData.splice(index, 1);
-		else {
-			const idx = index - this.rawData.length;
-			if (idx < this.newData.length) {
-				removeEvents(this.newData[idx]);
-				this.newData.splice(idx, 1);
-			} else return;
-		}
-		for (let i = this.newLines.length - 1; i >= 0; i--) {
-			if (this.newLines[i].index === index) this.newLines.splice(i, 1);
-		}
-		let removed = false;
-		for (let i = this.lnes.length - 1; i >= 0; i--) {
-			if (this.lnes[i].index === index) {
-				this.lnes.splice(i, 1);
-				removed = true;
-			}
-		}
-		if (removed) {
-			this.newLines.unshift(...this.lnes);
-			this.lnes = [];
-		}
-		this.altered = true;
 	}
 
 	// --> DATA xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 	/**
-	 * Build the lines for the table.
+	 * Adds new data to a currently existing table.
+	 * If an array has a complex structure (i.e. arrays or objects inside array),
+	 * each item in the array is assumed to resemble a row in the table.
+	 * @param data The data to be added.
 	 */
-	buildLines(): boolean {
-		if (this.newData.length === 0) return false;
-		const lines: lineObjects[] = [];
-		let changed = false;
-		const flat = this.flatten;
-		// to be used in case of ratio (none flat column)
-		const headSpacer = this.flatten ? '' : this.pad + this.headerVBorder + this.pad;
-		const contentSpacer =
-			this.pad + (this.contentVBorder ? this.contentVBorder : '') + this.pad;
+	addData(data: unknown[] | string | boolean | number | object): void {
+		if (data == null) return;
 
-		// get left spacing
-		let border = '';
-		if (!this.flatten) border = this.borders.header ? this.borders.header.left || '' : '';
-		else border = this.borders.content ? this.borders.content.left || '' : '';
-		border = this.fixBorderSpace(border, this.lBorder);
-
-		const left = this.deep <= 1 ? fillSpace(this.margin) + border + this.pad : 0;
-
-		// get right spacing
-		border = this.borders.content ? this.borders.content.right || '' : '';
-		const right = this.deep <= 1 ? this.pad + border : '';
-
-		// fix values before start
-		if (this.rawData.length === 0) {
-			this.lnes = [];
-			this.newLines = [];
-		}
-
-		let startRow = this.rawData.length;
-		if (this.newLines.length > 0) startRow = this.newLines[this.newLines.length - 1].index + 1;
-
-		type colLineInfo = {
-			key: string;
-			col: CombinedInfo;
-			lines: string[];
-			max?: number;
-		};
-
-		const getLine = (info: colLineInfo[], lineNum: number): string => {
-			let line = '';
-			const hasData = true;
-			for (let i = 0, len = info.length; i < len; i++) {
-				if (info[i].col.size <= 0) continue;
-				if (line !== '') line += contentSpacer;
-				// add header if needs be
-				if (!flat) {
-					if (info[i].col.lines[lineNum]) {
-						line += info[i].col.lines[lineNum];
-						// hasData = true;
-					} else line += info[i].col.emptyHeader;
-					line += headSpacer;
-				}
-
-				// add content
-				if (info[i].lines[lineNum]) {
-					line += info[i].lines[lineNum];
-					// hasData = true;
-				} else line += info[i].col.emptyContent;
+		// NEW -------------------------------------
+		const isComplex = (obj: unknown[]): boolean => {
+			let similar = true;
+			let globalType = '';
+			for (let i = 0, len = obj.length; i < len; i++) {
+				const tpe = typeof obj[i];
+				if (i === 0) globalType = tpe;
+				else if (globalType !== tpe) similar = false;
+				if (tpe !== 'string' && tpe !== 'boolean' && tpe !== 'number') return true;
 			}
-			if (hasData) return left + line + right;
-			return '';
+			return similar;
 		};
+		const { isFlat } = this;
+		this.state |= states.ADDDATA;
+		if (Array.isArray(data)) {
+			if (isComplex(data)) {
+				data.forEach(row => this.addRow(row as unknown));
+			} else this.addRow(data);
+		} else this.addRow(data);
 
-		const createRowLines = (data: rawDataObject, idx: number): void => {
-			let max = 0;
-			// the rowLines to add as value
-			let value: string[] = [];
-			// the index of the rowwLines
-			const index = idx + startRow;
-			const colInfo: colLineInfo[] = [];
-			// set sizes
-			this.sortedCols.forEach(col => {
-				const { name, name2 } = col;
-
-				const info: colLineInfo = {
-					key: name,
-					col: col,
-					lines: [],
-				};
-				// see if column exist on current row
-				if (!this.newData[idx][name] && !this.newData[idx][name2]) {
-					colInfo.push(info);
-					return;
-				}
-				const NAME = this.newData[idx][name] ? name : name2;
-				info.lines = fillLine(this.newData[idx][NAME].lines, col);
-				if (!flat) {
-					value = [];
-					max = Math.max(col.lines.length, info.lines.length);
-					for (let lne = 0; lne < max; lne++) {
-						const line = getLine([info], lne);
-						if (line) value.push(line);
-					}
-					lines.push({ index, value });
-				} else {
-					max = Math.max(max, info.lines.length, col.lines.length);
-					colInfo.push(info);
-				}
-			});
-
-			if (flat) {
-				for (let lne = 0; lne < max; lne++) {
-					const line = getLine(colInfo, lne);
-					if (line) value.push(line);
-				}
-				lines.push({ index, value });
-			}
-		};
-
-		this.newData.forEach(createRowLines);
-		this.newLines.push(...lines);
-		changed = lines.length > 0;
-		this.rawData.push(...this.newData);
-		this.newData = [];
-		return changed;
+		// if (isFlat !== this.isFlat) this.setRatio();
+		if (isFlat !== this.isFlat) this.dataAddedRatioChange();
+		this.state ^= states.ADDDATA;
 	}
 
 	/**
@@ -1189,19 +1766,25 @@ export class Table extends BaseData {
 		const result: rawDataObject = {};
 		const keyNames: string[] = [];
 		const noCols: { [name: string]: number } = {};
-		const addColumn = (col: unknown, name: string | number): void => {
-			const nme = name.toString();
+		const addColData = (col: unknown = '', idx?: number, name?: unknown): void => {
+			const isnum = idx > -1;
+			const nme: string = isnum ? idx.toString() : (name as string);
 
 			// get correct Name
-			if (isNum(nme)) keyNames.push('');
-			else keyNames.push(nme);
+			if (isnum) {
+				// fixing null items inserted during array forEach itteration
+				let { length: len } = keyNames;
+				if (len === idx) keyNames.push('');
+				else for (let end = Number(nme); len <= end; len++) keyNames.push('');
+			} else keyNames.push(nme);
 
 			if (typeof col === 'object' || Array.isArray(col)) {
-				const options: Options = {
-					...this.nextOption,
-					maxDepth: this.maxdepth,
-				};
-				result[nme] = new Table(options, col, this.deep + 1, nme, this.totalRows);
+				if (this.deep === this.maxdepth) {
+					addColData(JSON.stringify(col), idx, nme);
+					return;
+				}
+				const options: Options | Options[] = this.nextOption;
+				result[nme] = new Table(col, options, this.deep + 1, nme, this.totalRows);
 			} else {
 				result[nme] = new ColumnData(
 					nme,
@@ -1211,103 +1794,160 @@ export class Table extends BaseData {
 					this.eLevel,
 				);
 			}
-			result[nme].on(Events.EventDataChanged, this.dataChangeEvent);
 			// match up colsize and datasize
-			if (this.cols[nme]) this.cols[nme].maxContent = result[nme].maxData;
-			else if (noCols[nme]) noCols[nme] = Math.max(noCols[nme], result[nme].maxData);
-			else noCols[nme] = result[nme].maxData || 0;
+			const max = result[nme].maxData;
+			this.contMax = Math.max(this.contMax, max);
+			if (this.cols[nme]) this.cols[nme].maxContent = max;
+			else noCols[nme] = max;
 		};
 
-		if (Array.isArray(row)) {
-			row.forEach(addColumn);
-		} else if (typeof row === 'object') {
+		this.state |= states.ADDROW;
+		const { isFlat } = this;
+
+		if (Array.isArray(row)) row.forEach(addColData);
+		else if (typeof row === 'object') {
 			const objKeys = Object.keys(row);
-			objKeys.forEach(key => addColumn(row[key], key));
-		} else {
-			// it is string, boolean, number
-			addColumn(row.toString(), '0');
-		}
+			objKeys.forEach(key => addColData(row[key], -1, key));
+		} else addColData(row.toString(), 0, ''); // it is string, boolean, number
 
 		// add the column names if needed
 		this.addColumns(keyNames);
 
-		const resKeys = Object.keys(result);
-		resKeys.forEach(key => {
-			let colSz = -1;
-			if (isNum(key)) {
-				const idx = parseInt(key, 10);
-				if (idx < this.keys.length) colSz = this.cols[this.keys[idx]].size;
-			} else if (this.keys[key]) colSz = this.cols[key].size;
-			if (colSz > -1) result[key].size = colSz;
-		});
-		// add the row
 		this.newData.push(result);
 
 		// update columns added
 		const keys = Object.keys(noCols);
 		keys.forEach(key => {
+			/* istanbul ignore else: no else - safety */
 			if (this.cols[key]) this.cols[key].maxContent = noCols[key];
 		});
+
+		if (!(this.state & states.ADDDATA)) {
+			/* istanbul ignore else: no else */
+			if (isFlat !== this.isFlat) this.dataAddedRatioChange();
+		}
+		this.state ^= states.ADDROW;
 	}
 
 	/**
-	 * Adds new data to a currently existing table.
-	 * If an array has a complex structure (i.e. arrays or objects inside array),
-	 * each item in the array is assumed to resemble a row in the table.
-	 * @param data The data to be added.
+	 * Deletes a row from the Table.
+	 * @param index The index of the row to be deleted.
 	 */
-	addData(data: unknown[] | string | boolean | number | object): void {
-		if (data == null) return;
+	deleteRow(index: number): void {
+		if (index < 0 || this.rawData.length + this.newData.length <= index) return;
+		let idx = index;
+		let rem = false;
 
-		// NEW -------------------------------------
-		const isComplex = (obj: unknown[]): boolean => {
-			for (let i = 0, len = obj.length; i < len; i++) {
-				const itmType = typeof obj[i];
-				if (itmType !== 'string' && itmType !== 'boolean' && itmType !== 'number') {
-					return true;
-				}
+		const fixColIndex = (data: rawDataObject) => {
+			const keys = Object.keys(data);
+			const d = data;
+			keys.forEach(key => {
+				d[key].row = idx;
+			});
+		};
+		const removeData = (dataTable: rawDataObject[]): void => {
+			if (!rem) {
+				const data = dataTable.splice(idx, 1)[0];
+				/* istanbul ignore else: else not hit in tests - safety */
+				if (data) rem = true;
 			}
-			return false;
+			if (dataTable.length === idx) return;
+			for (const len = dataTable.length; idx < len; idx++) {
+				fixColIndex(dataTable[idx]);
+			}
 		};
 
-		if (Array.isArray(data)) {
-			if (isComplex(data)) {
-				data.forEach(row => this.addRow(row as unknown));
-			} else this.addRow(data);
-		} else this.addRow(data);
+		const fixLines = (lines: lineObjects[]): boolean => {
+			const lns = lines;
+			let changed = false;
+			for (let x = lines.length - 1; x >= 0; x--) {
+				if (lns[x].index < index) return changed;
+				if (lns[x].index === index) lns.splice(x, 1);
+				else lns[x].index--;
+				changed = true;
+			}
+			return changed;
+		};
+
+		// fix rawdata || new data
+		const raw = this.rawData.length;
+		if (index < raw) removeData(this.rawData);
+		else idx = index - raw;
+		// new data will alwayd be affected
+		removeData(this.newData);
+
+		// fix lines // new lines
+		fixLines(this.newLines);
+		rem = fixLines(this.lnes);
+		if (rem) {
+			this.newLines.unshift(...this.lnes);
+			this.lnes = [];
+			this.val = '';
+		}
 	}
 
-	stream(data: unknown[] | string | boolean | number | object): void {
-		this.addData(data);
-		this.print();
-	}
-
-	print(): void {
+	// --> PRINTING FUNCTIONS xxxxxxxxxxxxxxxxxxxxxxxxxx
+	/**
+	 * Print data to the console.
+	 * @async
+	 */
+	async print(): Promise<void> {
 		const val = this.getValue();
-
-		const printSection = (): void => {
-			process.stdout.write(val + this.bottomBorder);
-			if (this.valueReset || !this.streaming) this.val = val;
-			else this.val += val;
-			this.oldVal = this.val;
+		const { valueReset, bottomBorder, oldVal } = this;
+		const printSection = async (end = ''): Promise<void> => {
+			if (this.valueReset || !this.streaming) this.oldVal = val;
+			else this.oldVal += val;
+			this.oldHeader = this.header;
+			this.val = '';
 			this.valueReset = false;
+			return new Promise((res, rej) => {
+				process.stdout.write(val + bottomBorder + end, err => {
+					/* istanbul ignore if: no need to test error */
+					if (err) return rej(err);
+					return res();
+				});
+			});
 		};
 
+		const remover = async (left: number, lines: number): Promise<void> =>
+			// eslint-disable-next-line implicit-arrow-linebreak
+			new Promise((res, rej) => {
+				try {
+					readline.moveCursor(process.stdout, left, lines, () => {
+						readline.clearScreenDown(process.stdout, () => res());
+					});
+				} catch (error) {
+					/* istanbul ignore next: no need to test */
+					rej(error);
+				}
+			});
 		// remove previously printed lines
 		if (this.streaming) {
-			let removeLines = 0;
-			if (this.valueReset) removeLines = Math.max(0, this.val.split('\n').length - 1);
-			else removeLines = Math.max(0, this.bottomBorder.split('\n').length - 1);
-			if (removeLines !== 0) {
-				removeLines = -Math.abs(removeLines);
-				const moveleft = -Math.abs(this.maxsize + 10);
-				process.stdout.moveCursor(moveleft, removeLines, () => {
-					process.stdout.clearScreenDown(printSection);
-				});
-			} else printSection();
-		} else printSection();
+			const borderLen = bottomBorder ? bottomBorder.split('\n').length : 0;
+			const valLen = oldVal ? oldVal.split('\n').length : 0;
+			/* istanbul ignore next: ? 0 never hit in test */
+			let removeLines = !valueReset ? (oldVal === '' ? 0 : borderLen) : valLen;
+			if (removeLines) {
+				removeLines = -Math.max(0, --removeLines);
+				/* istanbul ignore next: : 0 never hit in test */
+				const moveleft = oldVal ? -Math.abs(this.maxsize + 10) : 0;
+				await remover(moveleft, removeLines);
+			}
+			return printSection();
+		}
+		return printSection(this.bottomBorder ? '\n' : '');
 	}
 
+	/**
+	 * Adds data to the table and prints it automatically to the console.
+	 * @param data The data to add to the stream.
+	 * @async
+	 */
+	async stream(data?: unknown[] | string | boolean | number | object): Promise<void> {
+		/* istanbul ignore else: no else */
+		if (data) this.addData(data);
+		return this.print();
+	}
 	// #endregion
 }
 
@@ -1328,4 +1968,10 @@ type colMininfo = {
 type lineObjects = {
 	index: number;
 	value: string[];
+};
+type colLineInfo = {
+	key: string;
+	col: CombinedInfo;
+	lines: string[];
+	max?: number;
 };

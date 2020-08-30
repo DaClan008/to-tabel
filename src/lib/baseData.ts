@@ -1,39 +1,35 @@
-import { EventEmitter } from 'events';
-import * as Events from './events';
+import { Options } from '../types/options';
 
-export abstract class BaseData extends EventEmitter {
-	/* istanbul ignore next: default keys should not be relevant in table */
-	constructor(readonly key = '', readonly row = -1, readonly maxsize = -1) {
-		super();
-	}
+export abstract class BaseData {
+	// #region - variables and properties
+	/** readonly variable storing the value of the maxsize as set during initialization. */
+	protected readonly maxsize;
 
+	/** a variable storing the size of the Table. */
 	private sze = -1;
 
+	// ABSTRACT / PROTECTED PROPERTIES -------------------------
 	/**
-	 * get the maximum size of the data component only (exclude all padding, marg, borders).
-	 * If value changes, altered should be called.
+	 * Get an Array of lines (string values) for each row.
 	 */
-	abstract get maxData(): number;
-
 	abstract get lines(): string[];
 
-	/** Get or set the size of the column */
-	set size(val: number) {
-		/* istanbul ignore else: no else */
-		if (val === this.sze) return;
-		if (val > this.maxsize && this.maxsize > -1) this.sze = this.maxsize;
-		else this.sze = Math.max(-1, val);
-		if (this.sizeChanged()) {
-			if (this.buildLines(true)) this.emit(Events.EventDataChanged, this);
-		}
-	}
+	/** Get the Maximum size (width) of the data (either added together, or stacked). */
+	abstract get maxData(): number;
 
-	get size(): number {
-		return this.sze > -1
-			? this.maxsize > -1 && this.maxsize < this.sze
-				? this.maxsize
-				: this.sze
-			: this.maxData;
+	/**
+	 * Get a value by which the size of the table should be reduced by to get to a printable
+	 * size.  This therefore exclud margin, outer borders and outer paddings.
+	 */
+	protected abstract get sizeAdjuster(): number;
+
+	// NORMAL PROPERTIES -----------
+	/**
+	 * Get the total amount of lines in the table.
+	 * This may differ from row count
+	 */
+	get lineCount(): number {
+		return this.lines.length;
 	}
 
 	/** Get the internal size of the column. (i.e. it returns the actually set value only) */
@@ -41,15 +37,61 @@ export abstract class BaseData extends EventEmitter {
 		return this.sze;
 	}
 
-	/**
-	 * Build a new array and if the new array is different from the old should return true.
-	 * Else return false.
-	 */
-	abstract buildLines(force?: boolean): boolean;
-
-	abstract sizeChanged(): boolean;
-
-	get lineCount(): number {
-		return this.lines.length;
+	/** Get or set the size of the data */
+	set size(val: number) {
+		/* istanbul ignore else: no else */
+		if (val === this.sze) return;
+		const { size: old } = this;
+		if (val > this.maxsize && this.maxsize > -1) this.sze = this.maxsize;
+		else this.sze = Math.max(-1, val);
+		if (old !== this.size) {
+			this.sizeChanged();
+			this.buildLines(true);
+		}
 	}
+
+	get size(): number {
+		const { sze, maxData } = this;
+		const sizeAdjuster = this.sizeAdjuster ? this.sizeAdjuster : 0;
+		return sze > -1 ? sze : maxData + sizeAdjuster;
+	}
+
+	// #endregion
+
+	/* istanbul ignore next: default keys should not be relevant in table */
+	/**
+	 * Constructs an abstract base data object.
+	 * @param key The key or column name for the current data object.
+	 * @param row The row number for the data in this object.
+	 * @param opts Any Options available that relate to the current data.
+	 * @param deep The depth of the current data
+	 */
+	constructor(
+		readonly key = '',
+		public row = -1,
+		opts?: Options | Options[] | number,
+		deep?: Number,
+	) {
+		let max = -1;
+		if (opts) {
+			if (typeof opts === 'number') max = opts;
+			else {
+				const curOpts: Options = (Array.isArray(opts) ? opts[0] : opts) || {};
+				max = curOpts.maxSize || (deep === 1 ? 120 : -1);
+			}
+		}
+		this.maxsize = max;
+	}
+
+	/**
+	 * Build the lines for the table.
+	 * [Push new items into newLines array, and move data from newData to rawData Arrays]
+	 */
+	protected abstract buildLines(force?: boolean): boolean;
+
+	/**
+	 * Get a value by which the size of the table should be reduced by to get to a printable
+	 * size.  This therefore exclud margin, outer borders and outer paddings.
+	 */
+	protected abstract sizeChanged(): void;
 }
