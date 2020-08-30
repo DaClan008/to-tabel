@@ -6,6 +6,7 @@ import {
 	getStringLines,
 	fillLine,
 	isNum,
+	arrayMatch,
 } from '../src/lib/helper';
 import { emojiLevel, Alignment } from '../src/types/options';
 import { IColumnSize } from '../src/lib/interfaces';
@@ -450,5 +451,26 @@ describe('testing fillLine function, Ratio 0', () => {
 		result = fillLine(['this is super long'], col, true);
 
 		expect(result).toMatchObject(['this is su']);
+	});
+});
+
+describe('testing arrayMatch', () => {
+	test('wrong array params', () => {
+		expect(arrayMatch(null, [])).toBeFalsy();
+		expect(arrayMatch([], null)).toBeFalsy();
+		expect(arrayMatch('' as any, [])).toBeFalsy();
+		expect(arrayMatch([], 1 as any)).toBeFalsy();
+		expect(arrayMatch([], [])).toBeTruthy();
+	});
+
+	test('wronge data types', () => {
+		expect(arrayMatch([1], ['a'])).toBeFalsy();
+		expect(arrayMatch([1], [1])).toBeTruthy();
+		expect(arrayMatch(['a'], ['a'])).toBeTruthy();
+	});
+
+	test('array with objects', () => {
+		expect(arrayMatch([{ a: 'a' }], [{ b: 'b' }])).toBeFalsy();
+		expect(arrayMatch([{ a: 'a' }], [{ a: 'a' }])).toBeTruthy();
 	});
 });

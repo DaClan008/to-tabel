@@ -37,6 +37,8 @@ describe('testing ColumnInfo Object construct', () => {
 		options.headAlign = Alignment.center;
 		options.size = 6;
 		obj = new ColumnInfo(options);
+		// just to clear test... next code
+		obj.resetContent();
 		expect(obj.headAlign).toBe(Alignment.center);
 		expect(obj.lines).toMatchObject([' col1 ']);
 		expect(obj.align).toBe(Alignment.right);
@@ -539,10 +541,71 @@ describe('testing size property', () => {
 		expect(nme.maxContent).toBe(20);
 		expect(nme.contentSize).toBe(22);
 		nme.setExternalMax(23);
+		// following code will just return and should not effect rest of code.
+		nme.setExternalMax(23, -1);
 		expect(nme.size).toBe(22);
 		expect(nme.maxContent).toBe(23);
 		expect(nme.contentSize).toBe(22);
 		expect(nme.lines).toMatchObject(['col1                  ']);
+	});
+
+	test('min and maxSize combination', () => {
+		// if maxsize is smaller than minsize maxsize will be 0
+		let options: colOptions = { name: '0', minSize: 6, maxSize: 0.5 };
+		let obj = new ColumnInfo(options);
+		obj.tableSize = 10;
+
+		expect(obj.maxSize).toBe(0);
+		expect(obj.size).toBe(0);
+		expect(obj.minSize).toBe(6);
+
+		options = { name: '0', minSize: 6, maxSize: 0.7 };
+		obj = new ColumnInfo(options);
+		obj.tableSize = 10;
+
+		expect(obj.maxSize).toBe(7);
+		expect(obj.size).toBe(7);
+		expect(obj.minSize).toBe(6);
+	});
+
+	test('maxSize and fixed Size', () => {
+		// When size is fixed and ratio is more than one it is assumed that the
+		// size options supplied only refers to the content portion and not the entire table.
+		const options: colOptions = { name: '0', size: 10 };
+		const obj = new ColumnInfo(options);
+		obj.size = 8;
+		obj.ratio = 1;
+		expect(obj.size).toBe(24);
+	});
+
+	test('spaceSize value', () => {
+		// returns the size of the actual content excluding padding and border.
+		// if ratio is 0 padding and borders are ignored as there are none.
+		const options: colOptions = { name: '0', size: 10 };
+		const obj = new ColumnInfo(options);
+
+		// no padding and border
+		expect(obj.spaceSize).toBe(10);
+
+		obj.ratio = 1;
+		// padding = 2 x 2 + border (0) : 10 - 4
+		expect(obj.spaceSize).toBe(6);
+	});
+
+	test(' setting size 0 tableSize options', () => {
+		let options: colOptions = { name: '0', size: 10, maxSize: 0.5 };
+		let obj = new ColumnInfo(options);
+
+		obj.size = 9;
+		obj.tableSize = 10;
+		expect(obj.size).toBe(0);
+
+		options = { name: '0', size: 0, maxSize: 0.5 };
+		obj = new ColumnInfo(options);
+
+		obj.size = 9;
+		obj.tableSize = 10;
+		expect(obj.size).toBe(0);
 	});
 });
 
@@ -644,7 +707,6 @@ describe('testing max- && minSize property', () => {
 		expect(obj.size).toBe(8);
 		const evnt = new EventReg(obj);
 
-		// size should reset to bring in line with maxSize if table size is set
 		obj.tableSize = 15;
 		// maxHeader will always be the same as content actual size
 		expect(obj.maxHeader).toBe(4);
@@ -673,6 +735,13 @@ describe('testing max- && minSize property', () => {
 		expect(obj.maxHeader).toBe(4);
 		expect(evnt.list).toMatchObject([]);
 		evnt.reset();
+	});
+
+	test('resetting minSize with size options', () => {
+		const options: colOptions = { name: '0', size: 10, minSize: 5 };
+		const obj = new ColumnInfo(options);
+		// if size >= 1 it will always override minSize value.
+		expect(obj.minSize).toBe(10);
 	});
 });
 
@@ -731,34 +800,38 @@ describe('testing ratio property', () => {
 		expect(evnt.list).toMatchObject([]);
 		evnt.reset();
 		obj.ratio = 1;
-		expect(obj.size).toBe(4);
-		expect(obj.headerSize).toBe(0);
-		expect(obj.contentSize).toBe(0);
-		expect(obj.lines).toMatchObject([]);
-		expect(evnt.list).toMatchObject(['ratio', 'lines']);
+		// size (11) will be ignored if ratio > 0 and addopt tableSize
+		expect(obj.size).toBe(10);
+		expect(obj.headerSize).toBe(3);
+		expect(obj.contentSize).toBe(3);
+		expect(obj.lines).toMatchObject(['col', '1  ']);
+		expect(evnt.list).toMatchObject(['ratio', 'lines', 'size']);
 		expect(obj.ratio).toBe(4 / 9);
 		evnt.reset();
 		obj.tableSize = 18;
-		expect(obj.size).toBe(8);
+		// 0.4 * 18 === (contentsize)... actual size = conten / (1 - ratio [4/9]) + space (4)
+		expect(obj.size).toBe(18);
 		expect(obj.ratio).toBe(4 / 9);
-		expect(obj.headerSize).toBe(2);
-		expect(obj.contentSize).toBe(8 - 4 - 2);
-		expect(obj.lines).toMatchObject(['co', 'l1']);
+		expect(obj.headerSize).toBe(6);
+		expect(obj.contentSize).toBe(18 - 4 - 6);
+		expect(obj.lines).toMatchObject(['col1  ']);
 		expect(evnt.list).toMatchObject(['lines', 'size']);
 		evnt.reset();
-		obj.tableSize = 18;
-		expect(evnt.list).toMatchObject([]);
 		obj.ratio = 0;
 		expect(obj.tableSize).toBe(18);
+		expect(obj.size).toBe(7);
+		expect(obj.headerSize).toBe(7);
+		expect(obj.contentSize).toBe(7);
 		expect(obj.isFixed).toBeTruthy();
 		expect(obj.isPercent).toBeTruthy();
 		obj.size = 30;
-		expect(obj.size).toBe(8);
+		expect(obj.size).toBe(7);
 		obj.tableSize = 78;
 		// 30 is below 32
 		expect(obj.size).toBe(0);
 		obj.size = 35;
-		expect(obj.size).toBe(32);
+		// size is biger than fixed size (31)... lock to fixed
+		expect(obj.size).toBe(31);
 		obj.tableSize = -1;
 		expect(obj.tableSize).toBe(-1);
 		expect(obj.isFixed).toBeFalsy();
@@ -883,16 +956,6 @@ describe('testing the order property', () => {
 
 		const obj = new ColumnInfo(options);
 		expect(obj.order).toBe(0);
-		const evnt = new EventReg(obj);
-
-		obj.order = 3;
-		expect(obj.order).toBe(3);
-		expect(evnt.list).toMatchObject(['order']);
-
-		evnt.reset();
-		obj.order = 3;
-		expect(obj.order).toBe(3);
-		expect(evnt.list).toMatchObject([]);
 	});
 
 	test('testing with order property on initializing', () => {

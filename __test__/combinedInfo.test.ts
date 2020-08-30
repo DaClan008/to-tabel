@@ -69,8 +69,10 @@ describe('CombinedInfo init', () => {
 		expect(obj.eLevel).toBe(emojiLevel.all);
 		expect(obj.align).toBe(Alignment.left);
 		expect(obj.headAlign).toBe(Alignment.left);
+		obj.ratio = 1;
+		expect(obj.ratio).toBe(0);
 
-		obj.compare(null, null);
+		obj.addCol(null, null);
 		expect(obj.proper).toBeFalsy();
 	});
 	test('only one info available import', () => {
@@ -332,6 +334,131 @@ describe('Size Property inside CombinedInfo', () => {
 		obj.size = 5;
 		expect(obj.size).toBe(0);
 	});
+
+	test('setsize and isFixed property', () => {
+		// setsize returns the size set at the start of creating the columns.
+		// should bear in mind that the name column has preference
+		let nme = new ColumnInfo({ name: 'c1', size: 5 });
+		let num = new ColumnInfo({ name: '0', size: 10 });
+		let obj = new CombinedInfo(nme, num);
+
+		obj.size = 20;
+
+		expect(obj.setsize).toBe(5);
+		expect(obj.isFixed).toBeTruthy();
+
+		// should return 10 because num is set eventhough nme is not
+		nme = new ColumnInfo({ name: 'c1' });
+		num = new ColumnInfo({ name: '0', size: 10 });
+		obj = new CombinedInfo(nme, num);
+		obj.size = 20;
+		expect(obj.setsize).toBe(10);
+		expect(obj.isFixed).toBeTruthy();
+
+		num = new ColumnInfo({ name: '0', size: 0.5 });
+		obj = new CombinedInfo(nme, num);
+		obj.size = 20;
+		expect(obj.setsize).toBe(0.5);
+		expect(obj.isFixed).toBeFalsy();
+		obj.tableSize = 200;
+		expect(obj.setsize).toBe(0.5);
+		expect(obj.isFixed).toBeTruthy();
+
+		// should return -1 if none is set
+		nme = new ColumnInfo({ name: 'c1' });
+		num = new ColumnInfo({ name: '0' });
+		obj = new CombinedInfo(nme, num);
+		obj.size = 20;
+		expect(obj.setsize).toBe(-1);
+		expect(obj.isFixed).toBeFalsy();
+
+		// should have similar effect with null object
+		num = new ColumnInfo({ name: '0', size: 10 });
+		obj = new CombinedInfo(null, num);
+		obj.size = 20;
+		expect(obj.setsize).toBe(10);
+		expect(obj.isFixed).toBeTruthy();
+
+		nme = new ColumnInfo({ name: 'c1', size: 5 });
+		obj = new CombinedInfo(nme, null);
+
+		obj.size = 20;
+
+		expect(obj.setsize).toBe(5);
+		expect(obj.isFixed).toBeTruthy();
+	});
+
+	test('spacer and spaceSize Property', () => {
+		// spaceSize = the size the actual data takes up in a given column.
+		// please note that if ratio = 0, then spaceSize = size
+		// if not then spaceSize = size - spacer
+		// spacer being the padding and borders between header and content.
+
+		let nme = new ColumnInfo({ name: 'c1' });
+		let num = new ColumnInfo({ name: '0' });
+		let obj = new CombinedInfo(nme, num);
+
+		// size of the column
+		expect(obj.spaceSize).toBe(2);
+		// 2 x padding (2 each)
+		expect(obj.spacer).toBe(4);
+
+		nme.maxContent = 20;
+		expect(obj.spaceSize).toBe(20);
+		// 2 x padding (2 each)
+		expect(obj.spacer).toBe(4);
+		num.maxContent = 25;
+		expect(obj.spaceSize).toBe(25);
+		// 2 x padding (2 each)
+		expect(obj.spacer).toBe(4);
+		expect(obj.size).toBe(25);
+		// now if ratio is set
+		obj.ratio = 1;
+		expect(obj.spacer).toBe(4);
+		// header: 2 + content (25)
+		expect(obj.spaceSize).toBe(27);
+		// spaceSize + spacer
+		expect(obj.size).toBe(31);
+
+		nme = new ColumnInfo({ name: 'c1', size: 10 });
+		num = new ColumnInfo({ name: '0' });
+		obj = new CombinedInfo(nme, num);
+
+		// size of the column
+		expect(obj.spaceSize).toBe(10);
+		expect(obj.size).toBe(10);
+
+		nme.maxContent = 20;
+		expect(obj.spaceSize).toBe(10);
+		num.maxContent = 25;
+		expect(obj.spaceSize).toBe(10);
+		expect(obj.size).toBe(10);
+		// now if ratio is set
+		obj.ratio = 1;
+		// max size (10) - spacer (4)... available space for content = 6
+		expect(obj.spaceSize).toBe(6);
+		expect(obj.size).toBe(10);
+
+		// same preinciples apply if one item is null
+		num = new ColumnInfo({ name: '0' });
+		obj = new CombinedInfo(null, num);
+
+		// size of the column ('col-0')
+		expect(obj.spaceSize).toBe(5);
+		// 2 x padding (2 each)
+		expect(obj.spacer).toBe(4);
+
+		nme = new ColumnInfo({ name: 'c1', size: 10 });
+		obj = new CombinedInfo(nme, null);
+		// size of the column ('col-0')
+		expect(obj.spaceSize).toBe(10);
+		// 2 x padding (2 each)
+		expect(obj.spacer).toBe(4);
+
+		obj = new CombinedInfo(null, null);
+		expect(obj.spaceSize).toBe(0);
+		expect(obj.spacer).toBe(0);
+	});
 });
 
 describe('Ratio property insize CombinedInfo', () => {
@@ -362,9 +489,10 @@ describe('Ratio property insize CombinedInfo', () => {
 		expect(obj.emptyHeader).toBe('    ');
 		expect(nmeEvnt.list).toMatchObject(['ratio', 'lines', 'size']);
 		// headersize does not change from 5... therefore no ratio change... only size changed.
-		expect(numEvnt.list).toMatchObject(['ratio', 'size']);
+		expect(numEvnt.list).toMatchObject(['lines', 'size']);
 		expect(nme.ratio).toBe(0.2);
-		expect(num.ratio).toBe(5 / 7);
+		// if both num and nme - we don't change num.
+		expect(num.ratio).toBe(0);
 
 		numEvnt.reset();
 		nmeEvnt.reset();
@@ -394,7 +522,7 @@ describe('Ratio property insize CombinedInfo', () => {
 		expect(nme.ratio).toBe(0.5);
 		expect(nme.contentSize).toBe(5);
 		expect(obj.lines).toMatchObject(['col1 ']);
-		expect(numEvnt.list).toMatchObject(['ratio', 'lines']);
+		expect(numEvnt.list).toMatchObject([]);
 		expect(nmeEvnt.list).toMatchObject(['ratio', 'lines']);
 		numEvnt.reset();
 		nmeEvnt.reset();
@@ -404,7 +532,7 @@ describe('Ratio property insize CombinedInfo', () => {
 		expect(obj.size).toBe(14);
 		expect(obj.headerSize).toBe(6);
 		expect(obj.contentSize).toBe(5);
-		expect(numEvnt.list).toMatchObject(['max', 'lines']);
+		expect(numEvnt.list).toMatchObject([]);
 		expect(nmeEvnt.list).toMatchObject(['max', 'lines']);
 		expect(obj.lines).toMatchObject(['col1  ']);
 
@@ -414,7 +542,7 @@ describe('Ratio property insize CombinedInfo', () => {
 		// should change if content size changes
 		num.maxContent = 6;
 		expect(obj.ratio).toBe(0.4);
-		expect(numEvnt.list).toMatchObject(['max', 'ratio', 'lines']);
+		expect(numEvnt.list).toMatchObject(['max']);
 		// on any original item.
 		nme.maxContent = 6;
 		expect(obj.ratio).toBe(0.4);
@@ -426,8 +554,6 @@ describe('Ratio property insize CombinedInfo', () => {
 
 		// fix ratio variable
 		obj.ratio = 0.3;
-		expect(obj.ratio).toBe(0.3);
-		obj.reset();
 		expect(obj.ratio).toBe(0.3);
 		// don't change if ratio don't make sense
 		obj.ratio = -1;
@@ -580,12 +706,13 @@ describe('odd property & Events tests inside CombinedInfo', () => {
 	test('testing events', () => {
 		const num = new ColumnInfo({ name: '1' });
 		const nme = new ColumnInfo({ name: 'col1' });
-
-		const obj = new CombinedInfo(nme, num);
-
-		const objEvnt = new EventReg(obj);
 		const numEvnt = new EventReg(num);
 		const nmeEvnt = new EventReg(nme);
+
+		const obj = new CombinedInfo(nme, num);
+		const objEvnt = new EventReg(obj);
+		nmeEvnt.reset();
+		numEvnt.reset();
 
 		num.maxContent = 20;
 
@@ -600,7 +727,7 @@ describe('odd property & Events tests inside CombinedInfo', () => {
 		obj.ratio = 1;
 		expect(objEvnt.list).toMatchObject(['ratio', 'lines', 'size']);
 		expect(nmeEvnt.list).toMatchObject(['ratio', 'lines', 'size']);
-		expect(numEvnt.list).toMatchObject(['ratio', 'lines', 'size']);
+		expect(numEvnt.list).toMatchObject(['lines', 'size']);
 
 		expect(obj.size).toBe(28);
 		expect(obj.ratio).toBe(4 / 24);
@@ -610,10 +737,10 @@ describe('odd property & Events tests inside CombinedInfo', () => {
 		numEvnt.reset();
 		nmeEvnt.reset();
 		objEvnt.reset();
-		expect(num.ratio).toBe(0.2);
+		expect(num.ratio).toBe(0);
 
 		num.ratio = 0.3;
-		expect(numEvnt.list).toMatchObject(['ratio', 'size']);
+		expect(numEvnt.list).toMatchObject(['ratio', 'lines']);
 		expect(nmeEvnt.list).toMatchObject([]);
 		expect(objEvnt.list).toMatchObject([]);
 
@@ -626,18 +753,21 @@ describe('odd property & Events tests inside CombinedInfo', () => {
 		const num = new ColumnInfo({ name: '1' });
 		const nme = new ColumnInfo({ name: 'col1' });
 
-		const obj = new CombinedInfo(nme, num);
-
-		const objEvnt = new EventReg(obj);
 		const numEvnt = new EventReg(num);
 		const nmeEvnt = new EventReg(nme);
+		const obj = new CombinedInfo(nme, num);
+		nmeEvnt.reset();
+		numEvnt.reset();
+		const objEvnt = new EventReg(obj);
 
+		// done setting up
 		num.maxContent = 20;
 
 		expect(objEvnt.list).toMatchObject(['max', 'lines', 'size']);
 		expect(numEvnt.list).toMatchObject(['max', 'lines', 'size']);
 		expect(nmeEvnt.list).toMatchObject(['max', 'lines', 'size']);
 
+		// should not be able to load a new column over an existing one
 		const num2 = new ColumnInfo({ name: '2', size: 10, order: 2, tableSize: 20 });
 		const num2Evnt = new EventReg(num2);
 
@@ -645,48 +775,33 @@ describe('odd property & Events tests inside CombinedInfo', () => {
 		nmeEvnt.reset();
 		objEvnt.reset();
 
-		obj.compare(nme, num2);
-		expect(objEvnt.list).toMatchObject(['max', 'lines', 'size', 'order']);
+		obj.addCol(nme, num2);
+		expect(objEvnt.list).toMatchObject([]);
 		expect(numEvnt.list).toMatchObject([]);
-		expect(nmeEvnt.list).toMatchObject(['max', 'lines', 'size']);
+		expect(nmeEvnt.list).toMatchObject([]);
 		expect(num2Evnt.list).toMatchObject([]);
-
-		numEvnt.reset();
-		nmeEvnt.reset();
-		objEvnt.reset();
 
 		num2.size = 0;
 
-		expect(obj.size).toBe(0);
-		expect(objEvnt.list).toMatchObject(['lines', 'size']);
+		expect(obj.size).toBe(20);
+		expect(objEvnt.list).toMatchObject([]);
 		expect(numEvnt.list).toMatchObject([]);
-		expect(nmeEvnt.list).toMatchObject(['lines', 'size']);
-		expect(num2Evnt.list).toMatchObject(['lines', 'size']);
-
-		numEvnt.reset();
-		nmeEvnt.reset();
-		objEvnt.reset();
-
-		const nme2 = new ColumnInfo({ name: 'col2', tableSize: 5, order: 3 });
-		const nme2Evnt = new EventReg(nme2);
-
-		obj.compare(nme2, num2);
-		expect(objEvnt.list).toMatchObject(['max', 'lines', 'lines', 'order']);
 		expect(nmeEvnt.list).toMatchObject([]);
-		expect(nme2Evnt.list).toMatchObject(['lines', 'size']);
 		expect(num2Evnt.list).toMatchObject(['lines', 'size']);
 
 		num2Evnt.reset();
-		nme2Evnt.reset();
-		objEvnt.reset();
 
-		num2.order = 1;
-		// theres still a bigger order number
-		expect(objEvnt.list).toMatchObject(['order']);
-		objEvnt.reset();
-		nme2.order = 0;
-		expect(objEvnt.list).toMatchObject(['order']);
-		expect(obj.order).toBe(0);
+		// same goes for nmeCols
+		const nme2 = new ColumnInfo({ name: 'col2', tableSize: 5, order: 3 });
+		const nme2Evnt = new EventReg(nme2);
+
+		obj.addCol(nme2, num2);
+		expect(objEvnt.list).toMatchObject([]);
+		expect(nmeEvnt.list).toMatchObject([]);
+		expect(nme2Evnt.list).toMatchObject([]);
+		expect(num2Evnt.list).toMatchObject([]);
+
+		expect(obj.name).toBe('col1');
 	});
 
 	test('align properties', () => {
@@ -715,5 +830,40 @@ describe('odd property & Events tests inside CombinedInfo', () => {
 		expect(obj.align).toBe(Alignment.right);
 		expect(obj.headAlign).toBe(Alignment.center);
 		expect(obj.lines).toMatchObject(['  col-1   ']);
+	});
+
+	test('adding collumns later - name compatibility', () => {
+		let nme = new ColumnInfo({ name: 'headr' });
+		let num = new ColumnInfo({ name: '0' });
+		let obj = new CombinedInfo(null, num);
+
+		expect(obj.lines).toMatchObject(['col-0']);
+
+		obj.addCol(nme, num);
+
+		expect(obj.lines).toMatchObject(['headr']);
+
+		nme = new ColumnInfo({ name: 'hea-0', size: 3 });
+		num = new ColumnInfo({ name: '0', size: 3, tableSize: 10 });
+		obj = new CombinedInfo(null, num);
+
+		expect(obj.lines).toMatchObject(['col', '-0 ']);
+
+		obj.addCol(nme, num);
+
+		expect(obj.lines).toMatchObject(['hea', '-0 ']);
+	});
+
+	test('order Properties in both items', () => {
+		const nme = new ColumnInfo({ name: 'nme', order: 2 });
+		let num = new ColumnInfo({ name: '0', order: 1 });
+
+		let obj = new CombinedInfo(nme, num);
+		expect(obj.order).toBe(1);
+
+		num = new ColumnInfo({ name: '0', order: 3 });
+
+		obj = new CombinedInfo(nme, num);
+		expect(obj.order).toBe(2);
 	});
 });
