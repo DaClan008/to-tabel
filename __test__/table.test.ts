@@ -292,37 +292,6 @@ describe('ToTable initialization', () => {
 		table.value;
 		expect(table.isTable).toBeTruthy();
 	});
-
-	test('subOptions options variable', () => {
-		const data = {
-			name: 'first-data-layer',
-			level: {
-				name: 'second-data - layer',
-				level: {
-					name: 'third-data-layer',
-					level: {
-						name: 'fourth-data-layer',
-					},
-				},
-			},
-		};
-		const options: Options = {
-			subOptions: [
-				false, // for second data layer
-				{
-					// for third data layer
-					maxSize: 4,
-					padding: 1,
-					align: Alignment.right,
-					excludeHeader: false, // should be true automatically (regardless of setting)
-					stream: true, // should be ignored [main setting is used]
-				},
-				{
-					borders: [{ vertical: '||' as any }],
-				},
-			],
-		};
-	});
 });
 
 describe('Testing sizing properties', () => {
