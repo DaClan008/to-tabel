@@ -1,106 +1,106 @@
 {
-  "name": "to-table",
-  "version": "0.0.1",
-  "description": "Console log and object or array to table",
-  "main": "index.js",
-  "keywords": [
-    "table",
-    "console",
-    "log",
-    "flexible",
-    "border",
-    "borders",
-    "columns",
-    "log"
-  ],
-  "engines": {
-    "node": ">=8.5.0"
-  },
-  "scripts": {
-    "test": "jest",
-    "lint": "eslint src/**/*.ts --fix",
-    "clean": "rimraf ./bin",
-    "dts": "npx cleandts bin/index.d.ts --mod=index --all=to-table --restrict --newName=index2.d --protected",
-    "prebuild": "npm run clean && npm test",
-    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.d.json && npm run dts",
-    "postbuild": "node tools/finalizeBuild && eslint bin/**/*.* --fix -c .eslintrc2.json",
-    "prepack": "npm run build",
-    "pack": "node tools/publish",
-    "postpack": "npm run clean && npm run git",
-    "pregit": "git add -A",
-    "git": "git commit -m \"auto git commit\"",
-    "postgit": "git push",
-    "prebuild:quick": "npm run clean && tsc --inlineSourceMap false && node tools/finalizeBuild",
-    "build:quick": "npx prettier bin/**/*.js --write && eslint bin/**/*.* --fix"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/DaClan008/totable.git"
-  },
-  "author": "Jan Lehmkuhl <DaClan008@users.noreply.github.com> (http://somewhere.com/)",
-  "license": "Apache-2.0",
-  "bugs": {
-    "url": "https://github.com/DaClan008/totable/issues"
-  },
-  "homepage": "https://github.com/DaClan008/totable#readme",
-  "devDependencies": {
-    "@types/jest": "^26.0.0",
-    "@types/node": "^14.0.13",
-    "@typescript-eslint/eslint-plugin": "^3.3.0",
-    "@typescript-eslint/parser": "^3.3.0",
-    "clean-dts": "^3.1.1",
-    "codecov": "^3.7.0",
-    "coveralls": "^3.1.0",
-    "eslint": "^7.2.0",
-    "eslint-config-airbnb-base": "^14.2.0",
-    "eslint-config-node": "^4.1.0",
-    "eslint-config-prettier": "^6.11.0",
-    "eslint-plugin-import": "^2.21.2",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-prettier": "^3.1.4",
-    "jest": "^26.0.1",
-    "prettier": "^2.0.5",
-    "rimraf": "^3.0.2",
-    "ts-jest": "^26.1.0",
-    "ts-node": "^8.10.2",
-    "typescript": "^3.9.5"
-  },
-  "jest": {
-    "coverageDirectory": "./coverage/",
-    "collectCoverage": true,
-    "transform": {
-      "^.+\\.tsx?$": "ts-jest"
-    },
-    "coveragePathIgnorePatterns": [
-      "./node_modules",
-      "./coverage",
-      "./.vscode",
-      "./__test__",
-      "./tools"
+    "name": "to-tabel",
+    "version": "1.0.0",
+    "description": "Console log and object or array to table",
+    "main": "index.js",
+    "keywords": [
+        "table",
+        "console",
+        "log",
+        "flexible",
+        "border",
+        "borders",
+        "columns",
+        "log"
     ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 80,
-        "functions": 80,
-        "lines": 80,
-        "statements": -10
-      }
+    "engines": {
+        "node": ">=8.5.0"
     },
-    "coverageReporters": [
-      "json",
-      "lcov",
-      "text",
-      "clover"
-    ],
-    "moduleFileExtensions": [
-      "ts",
-      "tsx",
-      "js",
-      "jsx"
-    ]
-  },
-  "dependencies": {
-    "ansi-regex": "^5.0.0",
-    "boks": "^1.0.3"
-  }
+    "scripts": {
+        "test": "jest",
+        "lint": "eslint src/**/*.ts --fix",
+        "clean": "rimraf ./bin",
+        "dts": "npx cleandts bin/index.d.ts --mod=index --all=to-table --restrict --newName=index2.d --protected",
+        "prebuild": "npm run clean && npm test",
+        "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.d.json && npm run dts",
+        "postbuild": "node tools/finalizeBuild && eslint bin/**/*.* --fix -c .eslintrc2.json",
+        "prepack": "npm run build",
+        "pack": "node tools/publish",
+        "postpack": "npm run clean && npm run git",
+        "pregit": "git add -A",
+        "git": "git commit -m \"auto git commit\"",
+        "postgit": "git push",
+        "prebuild:quick": "npm run clean && tsc --inlineSourceMap false && node tools/finalizeBuild",
+        "build:quick": "npx prettier bin/**/*.js --write && eslint bin/**/*.* --fix"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/DaClan008/totable.git"
+    },
+    "author": "Jan Lehmkuhl <DaClan008@users.noreply.github.com> (http://somewhere.com/)",
+    "license": "Apache-2.0",
+    "bugs": {
+        "url": "https://github.com/DaClan008/totable/issues"
+    },
+    "homepage": "https://github.com/DaClan008/totable#readme",
+    "devDependencies": {
+        "@types/jest": "^26.0.0",
+        "@types/node": "^14.0.13",
+        "@typescript-eslint/eslint-plugin": "^3.3.0",
+        "@typescript-eslint/parser": "^3.3.0",
+        "clean-dts": "^3.1.1",
+        "codecov": "^3.7.0",
+        "coveralls": "^3.1.0",
+        "eslint": "^7.2.0",
+        "eslint-config-airbnb-base": "^14.2.0",
+        "eslint-config-node": "^4.1.0",
+        "eslint-config-prettier": "^6.11.0",
+        "eslint-plugin-import": "^2.21.2",
+        "eslint-plugin-node": "^11.1.0",
+        "eslint-plugin-prettier": "^3.1.4",
+        "jest": "^26.0.1",
+        "prettier": "^2.0.5",
+        "rimraf": "^3.0.2",
+        "ts-jest": "^26.1.0",
+        "ts-node": "^8.10.2",
+        "typescript": "^3.9.5"
+    },
+    "jest": {
+        "coverageDirectory": "./coverage/",
+        "collectCoverage": true,
+        "transform": {
+            "^.+\\.tsx?$": "ts-jest"
+        },
+        "coveragePathIgnorePatterns": [
+            "./node_modules",
+            "./coverage",
+            "./.vscode",
+            "./__test__",
+            "./tools"
+        ],
+        "coverageThreshold": {
+            "global": {
+                "branches": 80,
+                "functions": 80,
+                "lines": 80,
+                "statements": -10
+            }
+        },
+        "coverageReporters": [
+            "json",
+            "lcov",
+            "text",
+            "clover"
+        ],
+        "moduleFileExtensions": [
+            "ts",
+            "tsx",
+            "js",
+            "jsx"
+        ]
+    },
+    "dependencies": {
+        "ansi-regex": "^5.0.0",
+        "boks": "^1.0.3"
+    }
 }
