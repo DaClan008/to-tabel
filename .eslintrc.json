@@ -78,7 +78,8 @@
 				"eqeqeq": ["error", "smart"],
 				"@typescript-eslint/no-non-null-assertion": "off",
 				"@typescript-eslint/interface-name-prefix": "off",
-				"no-useless-constructor": "off"
+				"no-useless-constructor": "off",
+				"@typescript-eslint/ban-types": "warn"
 			}
 		}
 	],
