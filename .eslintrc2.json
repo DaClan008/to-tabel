@@ -148,7 +148,9 @@
 				"dot-notation": "off",
 				"no-var": "off",
 				"strict": "off",
-				"max-len": "off"
+				"max-len": "off",
+				"no-use-before-define": "off",
+				"no-shadow": "off"
 			}
 		}
 	],
