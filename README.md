@@ -1,6 +1,6 @@
 # TO-TABEL
 
-[![Build Status](https://travis-ci.com/DaClan008/totable.svg?branch=master)](https://travis-ci.com/DaClan008/totable.svg?branch=master)
+[![Build Status](https://travis-ci.com/DaClan008/totable.svg?branch=master)](https://travis-ci.com/DaClan008/totable)
 [![Coverage Status](https://coveralls.io/repos/github/DaClan008/totable/badge.svg?branch=master)](https://coveralls.io/github/DaClan008/totable?branch=master)
 [![codecov](https://codecov.io/gh/DaClan008/totable/branch/master/graph/badge.svg)](https://codecov.io/gh/DaClan008/totable)
 ![npm](https://img.shields.io/npm/v/to-tabel)
