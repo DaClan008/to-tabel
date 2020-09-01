@@ -1,6 +1,6 @@
 {
     "name": "to-tabel",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Console log and object or array to table",
     "main": "index.js",
     "keywords": [
