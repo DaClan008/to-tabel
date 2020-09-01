@@ -6,7 +6,7 @@ cache: npm
 script: npm run lint && npm test
 
 after_success:
-    - codecov && cat ./coverage/lcof.info | ./node_modules/.bin/coveralls
+    - codecov && cat ../coverage/lcov.info | ./node_modules/.bin/coveralls
 
 notifications:
     - emails: false
