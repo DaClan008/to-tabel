@@ -1,8 +1,8 @@
 # TO-TABEL
 
-[![Build Status](https://travis-ci.com/DaClan008/totable.svg?branch=master)](https://travis-ci.com/DaClan008/totable)
-[![Coverage Status](https://coveralls.io/repos/github/DaClan008/totable/badge.svg?branch=master)](https://coveralls.io/github/DaClan008/totable?branch=master)
-[![codecov](https://codecov.io/gh/DaClan008/totable/branch/master/graph/badge.svg)](https://codecov.io/gh/DaClan008/totable)
+[![Build Status](https://travis-ci.com/DaClan008/to-tabel.svg?branch=master)](https://travis-ci.com/DaClan008/to-tabel)
+[![Coverage Status](https://coveralls.io/repos/github/DaClan008/to-tabel/badge.svg)](https://coveralls.io/github/DaClan008/to-tabel)
+[![codecov](https://codecov.io/gh/DaClan008/to-tabel/branch/master/graph/badge.svg)](https://codecov.io/gh/DaClan008/to-tabel)
 ![npm](https://img.shields.io/npm/v/to-tabel)
 ![npm](https://img.shields.io/npm/dw/to-tabel)
 ![NPM](https://img.shields.io/npm/l/to-tabel)
