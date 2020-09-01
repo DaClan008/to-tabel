@@ -1,6 +1,5 @@
 /* eslint-disable no-param-reassign */
 import { EventEmitter } from 'events';
-import { kMaxLength } from 'buffer';
 import * as Events from './events';
 import { ColumnInfo } from './columnInfo';
 import { Alignment, emojiLevel } from '../types/options';
@@ -474,7 +473,7 @@ export class CombinedInfo extends EventEmitter implements IColumnSize {
 	 * Is called when the ratio change of one of the column pairs
 	 * affects the layout of the column
 	 */
-	private ratioEventListener = (col: ColumnInfo): void => {
+	private ratioEventListener = (): void => {
 		const { hSze, headerSize, cSze, contentSize, silent } = this;
 		if ((hSze === headerSize && cSze === contentSize) || silent) return;
 		// if (col.name === this.name2 && this.nmeCol) return;
