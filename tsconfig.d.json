@@ -1,0 +1,11 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"declaration": true,
+		"emitDeclarationOnly": true,
+		"inlineSourceMap": false,
+		"outFile": "./bin/index.d.ts",
+		"stripInternal": true
+	},
+	"files": ["./src/index.ts"]
+}

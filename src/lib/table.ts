@@ -1951,12 +1951,17 @@ export class Table extends BaseData {
 	// #endregion
 }
 
+/**
+ * @internal
+ */
 type rawDataObject = {
 	[colName: string]: ColumnData | Table;
 };
 
 type colProperties = { [key: string]: ColumnInfo };
-
+/**
+ * @internal
+ */
 type colMininfo = {
 	name: string;
 	maxSize: number;
@@ -1964,11 +1969,16 @@ type colMininfo = {
 	size: number;
 	order: number;
 };
-
+/**
+ * @internal
+ */
 type lineObjects = {
 	index: number;
 	value: string[];
 };
+/**
+ * @internal
+ */
 type colLineInfo = {
 	key: string;
 	col: CombinedInfo;

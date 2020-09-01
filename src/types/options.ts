@@ -121,16 +121,6 @@ export type Options = {
 
 export type borderOptionTypes = boksOptions | combinedBorders | BorderTypes;
 
-export type intOptions = {
-	borders: combinedBorders;
-	maxSize: number;
-	padding: number;
-	margin: number;
-	tabSize: number;
-	flatten: boolean;
-	maxDepth: number;
-	stream: boolean;
-};
 export type combinedBorders = {
 	content: boksOptions | false;
 	header: boksOptions | false;
@@ -152,28 +142,11 @@ export type columnProperties = {
 	[key: string]: columnProperty | number | boolean | string;
 };
 
-export type columnSize = {
-	/** the minimum size of a column */
-	minSize?: number;
-	/** the maximum size of a column */
-	maxSize?: number;
-	/**
-	 * print size. (a figure below 1 will be considered as percentage of the table size).
-	 */
-	size?: number;
-	/**
-	 * If true, the size will not change on recalibration.
-	 * @default false
-	 */
-	fixed?: boolean;
-};
-
 export enum Alignment {
 	left = 'left',
 	center = 'center',
 	right = 'right',
 }
-export type DataTypes = string[][] | Record<string, unknown>;
 
 export enum BorderTypes {
 	/** no borders */
