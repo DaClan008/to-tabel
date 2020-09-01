@@ -12,7 +12,7 @@ An easy way to log content in table form to a console. This table has amongst ot
 ## Install
 
 ```bash
-	npm install totable
+	npm install to-tabel
 ```
 
 ## Usage
