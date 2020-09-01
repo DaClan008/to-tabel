@@ -80,7 +80,8 @@
 				"@typescript-eslint/interface-name-prefix": "off",
 				"no-useless-constructor": "off",
 				"@typescript-eslint/ban-types": "warn",
-				"no-use-before-define": "warn"
+				"no-use-before-define": "warn",
+				"no-shadow": "warn"
 			}
 		}
 	],
