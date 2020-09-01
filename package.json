@@ -1,6 +1,6 @@
 {
     "name": "to-tabel",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Console log and object or array to table",
     "main": "index.js",
     "keywords": [
@@ -35,14 +35,14 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/DaClan008/totable.git"
+        "url": "git+https://github.com/DaClan008/to-tabel.git"
     },
     "author": "Jan Lehmkuhl <DaClan008@users.noreply.github.com> (http://somewhere.com/)",
     "license": "Apache-2.0",
     "bugs": {
-        "url": "https://github.com/DaClan008/totable/issues"
+        "url": "https://github.com/DaClan008/to-tabel/issues"
     },
-    "homepage": "https://github.com/DaClan008/totable#readme",
+    "homepage": "https://github.com/DaClan008/to-tabel#readme",
     "devDependencies": {
         "@types/jest": "^26.0.12",
         "@types/node": "^14.6.2",
